@@ -1,0 +1,48 @@
+{
+  "name": "Otimiza Beauty Manager",
+  "short_name": "Otimiza Beauty",
+  "description": "Sistema completo de gestão e agendamento para salões de beleza",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot1.png",
+      "sizes": "540x720",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "lifestyle"],
+  "shortcuts": [
+    {
+      "name": "Novo Agendamento",
+      "short_name": "Agendar",
+      "description": "Criar novo agendamento",
+      "url": "/agendar",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Minha Agenda",
+      "short_name": "Agenda",
+      "description": "Ver minha agenda do dia",
+      "url": "/profissionais",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
