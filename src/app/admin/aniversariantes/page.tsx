@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
 import { Cake, Phone, Mail, Gift, Calendar } from 'lucide-react';
 

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { supabase } from '@/lib/supabase';
 import { AlertCircle, Phone, Mail, DollarSign, Calendar, Filter } from 'lucide-react';

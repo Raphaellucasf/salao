@@ -15,9 +15,15 @@ export default function ProfessionalAppPage() {
     </div>
   );
 }
-              <p className="text-primary-100 text-xs mb-1">Receita Hoje</p>
-              <p className="text-2xl font-bold">R$ {stats.todayRevenue}</p>
-              <p className="text-primary-100 text-xs mt-1">comissão estimada</p>
+
+function Dashboard({ stats }: { stats: any }) {
+  return (
+    <header className="bg-gradient-to-br from-primary-600 to-primary-700 text-white p-6 rounded-lg shadow-lg mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div>
+          <p className="text-primary-100 text-xs mb-1">Receita Hoje</p>
+          <p className="text-2xl font-bold">R$ {stats.todayRevenue}</p>
+          <p className="text-primary-100 text-xs mt-1">comissão estimada</p>
             </div>
           </div>
         </div>
