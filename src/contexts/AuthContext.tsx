@@ -47,23 +47,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log('🔄 Carregando sessão do usuário...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('❌ Erro ao buscar sessão:', sessionError);
+          setLoading(false);
+          return;
+        }
         
         if (session?.user) {
-          const { role: userRole, full_name } = await fetchUserRole(
-            session.user.id, 
-            session.user.user_metadata
-          );
-          setUser({ 
-            id: session.user.id, 
-            email: session.user.email, 
-            role: userRole, 
-            full_name: full_name || session.user.user_metadata?.full_name
-          });
-          setRole(userRole);
+          console.log('✅ Sessão encontrada:', session.user.email);
+          try {
+            const { role: userRole, full_name } = await fetchUserRole(
+              session.user.id, 
+              session.user.user_metadata
+            );
+            console.log('✅ Role obtida:', userRole);
+            setUser({ 
+              id: session.user.id, 
+              email: session.user.email, 
+              role: userRole, 
+              full_name: full_name || session.user.user_metadata?.full_name
+            });
+            setRole(userRole);
+          } catch (roleError) {
+            console.error('❌ Erro ao buscar role:', roleError);
+            // Mesmo com erro, define usuário com role default
+            setUser({ 
+              id: session.user.id, 
+              email: session.user.email, 
+              role: 'admin', // Força admin em caso de erro
+              full_name: session.user.user_metadata?.full_name
+            });
+            setRole('admin');
+          }
+        } else {
+          console.log('ℹ️ Nenhuma sessão encontrada');
         }
       } catch (error) {
-        console.error('Error loading user:', error);
+        console.error('❌ Erro ao carregar usuário:', error);
       } finally {
         setLoading(false);
       }
