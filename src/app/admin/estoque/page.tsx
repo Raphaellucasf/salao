@@ -221,7 +221,7 @@ export default function EstoquePage() {
                         </p>
                         <p className="text-xs text-neutral-600">Mín: {produto.minimo}</p>
                         {produto.quantidade <= produto.minimo && (
-                          <Badge variant="danger" className="mt-1 text-xs">Baixo</Badge>
+                          <Badge variant="error" className="mt-1 text-xs">Baixo</Badge>
                         )}
                       </div>
                     </td>
@@ -288,7 +288,7 @@ export default function EstoquePage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <Badge variant={mov.tipo === 'entrada' ? 'success' : mov.tipo === 'saida' ? 'danger' : 'default'}>
+                    <Badge variant={mov.tipo === 'entrada' ? 'success' : mov.tipo === 'saida' ? 'error' : 'default'}>
                       {mov.tipo === 'entrada' ? '+' : '-'}{mov.quantidade}
                     </Badge>
                   </div>

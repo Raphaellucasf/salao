@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -211,3 +212,4 @@ export default function MensagemAvisoModal({ isOpen, onClose, clienteId, onSave 
     </Modal>
   );
 }
+

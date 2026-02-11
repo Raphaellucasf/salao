@@ -39,13 +39,13 @@ export default function OrcamentosPage() {
   };
 
   const getStatusInfo = (status: string) => {
-    const statusMap: Record<string, { variant: 'success' | 'warning' | 'danger' | 'primary', icon: any }> = {
+    const statusMap: Record<string, { variant: 'success' | 'warning' | 'error' | 'info', icon: any }> = {
       pendente: { variant: 'warning', icon: Clock },
       aprovado: { variant: 'success', icon: CheckCircle },
-      recusado: { variant: 'danger', icon: XCircle },
-      expirado: { variant: 'danger', icon: XCircle },
+      recusado: { variant: 'error', icon: XCircle },
+      expirado: { variant: 'error', icon: XCircle },
     };
-    return statusMap[status] || { variant: 'primary', icon: FileText };
+    return statusMap[status] || { variant: 'info', icon: FileText };
   };
 
   const stats = [

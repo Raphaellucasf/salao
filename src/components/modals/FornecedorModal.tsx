@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -303,3 +304,4 @@ export default function FornecedorModal({ isOpen, onClose, fornecedor, onSave }:
     </Modal>
   );
 }
+

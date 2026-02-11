@@ -367,7 +367,7 @@ export default function ServicosNewPage() {
                             )}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <Badge variant="secondary">
+                            <Badge variant="default">
                               {servico.duracao_minutos} min
                             </Badge>
                           </td>

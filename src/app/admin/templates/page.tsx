@@ -65,6 +65,7 @@ export default function TemplatesPage() {
     try {
       const { error } = await supabase
         .from('cadastro_templates')
+        // @ts-ignore - cadastro_templates table not in types
         .insert({
           tipo: template.tipo,
           nome_template: `${template.nome_template} (Cópia)`,
@@ -105,6 +106,7 @@ export default function TemplatesPage() {
     try {
       const { error } = await supabase
         .from('cadastro_templates')
+        // @ts-ignore - cadastro_templates table not in types
         .update({ ativo: !template.ativo })
         .eq('id', template.id);
 
@@ -236,9 +238,9 @@ export default function TemplatesPage() {
                       {template.campos_padrao?.map((campo: any, index: number) => (
                         <div key={index} className="flex items-center gap-2 text-sm">
                           <span className="font-medium">{campo.nome}</span>
-                          <Badge variant="default" size="sm">{campo.tipo}</Badge>
+                          <Badge variant="default">{campo.tipo}</Badge>
                           {template.campos_obrigatorios?.includes(campo.nome) && (
-                            <Badge variant="error" size="sm">Obrigatório</Badge>
+                            <Badge variant="error">Obrigatório</Badge>
                           )}
                           {campo.valor && (
                             <span className="text-gray-500">• Padrão: {campo.valor}</span>

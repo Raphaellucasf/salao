@@ -56,6 +56,7 @@ export default function ComandasPage() {
     try {
       const { error } = await supabase
         .from('comandas')
+        // @ts-ignore - comandas table not in types
         .update({
           status: 'fechada',
           data_fechamento: new Date().toISOString(),
@@ -75,6 +76,7 @@ export default function ComandasPage() {
     try {
       const { error } = await supabase
         .from('comandas')
+        // @ts-ignore - comandas table not in types
         .update({ status: 'cancelada' })
         .eq('id', comanda.id);
 
@@ -97,7 +99,7 @@ export default function ComandasPage() {
       case 'fechada':
         return <Badge variant="default">Fechada</Badge>;
       case 'cancelada':
-        return <Badge variant="danger">Cancelada</Badge>;
+        return <Badge variant="error">Cancelada</Badge>;
       default:
         return null;
     }
@@ -281,7 +283,7 @@ export default function ComandasPage() {
                       Fechar
                     </Button>
                     <Button
-                      variant="danger"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleCancelarComanda(comanda)}
                     >

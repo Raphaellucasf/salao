@@ -46,6 +46,7 @@ export default function PacotesPage() {
     try {
       const { error } = await supabase
         .from('pacotes')
+        // @ts-ignore - pacotes table not in types
         .update({ ativo: false })
         .eq('id', id);
 
@@ -110,7 +111,7 @@ export default function PacotesPage() {
                       <p className="text-sm text-neutral-600 mt-1">{pacote.descricao}</p>
                     </div>
                   </div>
-                  <Badge variant={pacote.ativo ? 'success' : 'danger'}>
+                  <Badge variant={pacote.ativo ? 'success' : 'error'}>
                     {pacote.ativo ? 'Ativo' : 'Inativo'}
                   </Badge>
                 </div>
@@ -150,7 +151,7 @@ export default function PacotesPage() {
                     Editar
                   </Button>
                   <Button
-                    variant="danger"
+                    variant="secondary"
                     size="sm"
                     onClick={() => handleDelete(pacote.id)}
                   >

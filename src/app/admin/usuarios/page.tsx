@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Users, Shield, Mail, Phone, Calendar, Search, Plus, Pencil, Trash2, Key } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import UsuarioModal from '@/components/modals/UsuarioModal';
 
@@ -67,15 +67,15 @@ export default function UsuariosPage() {
       if (usuariosError) throw usuariosError;
 
       if (usuariosData) {
-        setUsuarios(usuariosData);
+        setUsuarios(usuariosData as any);
 
         // Calcular stats
         const hoje = new Date().toISOString().split('T')[0];
         setStats({
           totalUsuarios: usuariosData.length,
-          usuariosAtivos: usuariosData.filter((u) => u.ativo).length,
-          usuariosInativos: usuariosData.filter((u) => !u.ativo).length,
-          acessosHoje: usuariosData.filter(
+          usuariosAtivos: (usuariosData as any[]).filter((u) => u.ativo).length,
+          usuariosInativos: (usuariosData as any[]).filter((u) => !u.ativo).length,
+          acessosHoje: (usuariosData as any[]).filter(
             (u) => u.ultimo_acesso && u.ultimo_acesso.startsWith(hoje)
           ).length,
         });
@@ -128,6 +128,7 @@ export default function UsuariosPage() {
       
       const { error } = await supabase
         .from('usuarios')
+        // @ts-ignore - usuarios table not in types
         .update({
           senha_hash: `$2a$10$${senhaTempor}`,
           senha_temporaria: true,

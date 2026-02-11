@@ -53,7 +53,7 @@ export default function ChequesPage() {
       case 'compensado':
         return <Badge variant="success">Compensado</Badge>;
       case 'devolvido':
-        return <Badge variant="danger">Devolvido</Badge>;
+        return <Badge variant="error">Devolvido</Badge>;
       case 'cancelado':
         return <Badge variant="default">Cancelado</Badge>;
       default:

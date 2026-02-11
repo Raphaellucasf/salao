@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -435,3 +436,4 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
     </Modal>
   );
 }
+

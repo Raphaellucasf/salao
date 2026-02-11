@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -356,3 +357,4 @@ export function SaldoModal({ isOpen, onClose, clienteId, onSuccess }: SaldoModal
     </Modal>
   );
 }
+

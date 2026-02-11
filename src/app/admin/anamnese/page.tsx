@@ -221,7 +221,7 @@ export default function AnamnesePage() {
                           <h3 className="text-lg font-bold text-neutral-900">
                             {anamnese.clientes?.nome}
                           </h3>
-                          <Badge variant="primary">{tipoInfo?.label}</Badge>
+                          <Badge variant="info">{tipoInfo?.label}</Badge>
                         </div>
                         <p className="text-sm text-neutral-600 mb-2">
                           {anamnese.clientes?.telefone} • {anamnese.clientes?.email}

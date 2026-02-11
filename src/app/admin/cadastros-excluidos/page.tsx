@@ -198,7 +198,7 @@ export default function CadastrosExcluidosPage() {
           {cadastrosFiltrados.map((cadastro) => {
             const nome = cadastro.dados_originais?.nome || 'Nome não disponível';
             const dataExclusao = new Date(cadastro.data_exclusao).toLocaleDateString('pt-BR');
-            const isExpirado = cadastro.dias_restantes !== null && cadastro.dias_restantes <= 0;
+            const isExpirado = cadastro.dias_restantes !== null && cadastro.dias_restantes !== undefined && cadastro.dias_restantes <= 0;
 
             return (
               <Card key={cadastro.id} className="p-4 hover:shadow-lg transition-shadow">
@@ -228,7 +228,7 @@ export default function CadastrosExcluidosPage() {
                             <strong>Motivo:</strong> {cadastro.motivo_exclusao}
                           </p>
                         )}
-                        {cadastro.dias_restantes !== null && (
+                        {cadastro.dias_restantes !== null && cadastro.dias_restantes !== undefined && (
                           <p>
                             <strong>Expira em:</strong>{' '}
                             {isExpirado ? (

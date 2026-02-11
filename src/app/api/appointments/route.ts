@@ -1,7 +1,7 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// @ts-nocheck
 // Nota: Os erros de tipo são temporários até que os tipos do Supabase sejam gerados
 // Execute: npx supabase gen types typescript --project-id ID > src/types/supabase.ts
 

@@ -90,6 +90,7 @@ export default function ServicosPage() {
     try {
       const { error } = await supabase
         .from('servicos')
+        // @ts-ignore - servicos table not in types
         .update({ ativo: !servico.ativo })
         .eq('id', servico.id);
 

@@ -41,7 +41,7 @@ export default function Sidebar({ userRole = 'admin' }: SidebarProps) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const items = menuItems[userRole] || menuItems.admin;
+  const items = (menuItems as any)[userRole] || menuItems.admin;
 
   return (
     <>
@@ -79,7 +79,7 @@ export default function Sidebar({ userRole = 'admin' }: SidebarProps) {
 
         {/* Navigation Menu */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {items.map((item) => {
+          {items.map((item: any) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
 

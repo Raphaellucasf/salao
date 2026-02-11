@@ -62,7 +62,7 @@ export default function ContasReceberPage() {
       case 'pago':
         return <Badge variant="success">Pago</Badge>;
       case 'vencido':
-        return <Badge variant="danger">Vencido</Badge>;
+        return <Badge variant="error">Vencido</Badge>;
       default:
         return null;
     }

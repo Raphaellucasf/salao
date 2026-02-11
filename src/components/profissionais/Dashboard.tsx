@@ -2,7 +2,7 @@
 
 import { Calendar, Clock, User, Star, ShoppingBag, TrendingUp, DollarSign, AlertCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect } from 'react';
 
@@ -140,7 +140,7 @@ export default function ProfessionalDashboard() {
                 )}
 
                 <div className="flex gap-2 pt-2">
-                  <Button variant="default" className="flex-1 bg-accent-500 hover:bg-accent-600 text-white">
+                  <Button variant="primary" className="flex-1 bg-accent-500 hover:bg-accent-600 text-white">
                     Iniciar Atendimento
                   </Button>
                   <Button variant="outline" className="border-neutral-300">

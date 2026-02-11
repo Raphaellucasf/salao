@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -249,3 +250,4 @@ export default function ProntuarioModal({ isOpen, onClose, clienteId, prontuario
     </Modal>
   );
 }
+

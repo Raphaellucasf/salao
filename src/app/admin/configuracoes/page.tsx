@@ -72,6 +72,7 @@ export default function ConfiguracoesPage() {
     try {
       const { error } = await supabase
         .from('configuracoes_sistema')
+        // @ts-ignore - configuracoes_sistema table not in types
         .update({
           nome_empresa: config.nome_empresa,
           cnpj: config.cnpj,

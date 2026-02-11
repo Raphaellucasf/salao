@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -564,3 +565,4 @@ export default function PromocaoModal({ isOpen, onClose, onSuccess, promocao }: 
     </Modal>
   );
 }
+

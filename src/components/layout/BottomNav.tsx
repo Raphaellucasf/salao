@@ -25,12 +25,12 @@ const navItems = {
 
 export default function BottomNav({ userRole = 'professional' }: BottomNavProps) {
   const pathname = usePathname();
-  const items = navItems[userRole] || navItems.professional;
+  const items = (navItems as any)[userRole] || navItems.professional;
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-200 z-50 safe-bottom">
       <div className="flex items-center justify-around px-2 py-2">
-        {items.map((item) => {
+        {items.map((item: any) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
 
