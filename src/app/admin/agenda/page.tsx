@@ -1,22 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Card } from '@/components/ui';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 
+interface Appointment {
+  id: string;
+  professionalId: string;
+  client: string;
+  service: string;
+  startTime: string;
+  duration: number;
+  status: 'confirmed' | 'pending' | 'cancelled';
+}
+
 export default function AgendaPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{time: string; professionalId: string} | null>(null);
 
-  // Mock data - profissionais
-  const professionals = [
+  // Mock data - profissionais (memoizado para evitar re-renders)
+  const professionals = useMemo(() => [
     { id: '1', name: 'Dimas', color: 'from-blue-500 to-blue-600' },
     { id: '2', name: 'Julya', color: 'from-pink-500 to-pink-600' },
     { id: '3', name: 'Hendril', color: 'from-purple-500 to-purple-600' },
     { id: '4', name: 'Amélia', color: 'from-green-500 to-green-600' },
-  ];
+  ], []);
 
-  // Mock data - agendamentos
-  const appointments = [
+  // Mock data - agendamentos (agora com setState)
+  const [appointments, setAppointments] = useState<Appointment[]>([
     {
       id: '1',
       professionalId: '1',
@@ -53,14 +65,17 @@ export default function AgendaPage() {
       duration: 180,
       status: 'confirmed',
     },
-  ];
+  ]);
 
-  // Gerar horários (8:00 às 19:00 a cada 30 min)
-  const timeSlots = [];
-  for (let hour = 8; hour < 19; hour++) {
-    timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-    timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
-  }
+  // Gerar horários (8:00 às 19:00 a cada 30 min) - memoizado
+  const timeSlots = useMemo(() => {
+    const slots = [];
+    for (let hour = 8; hour < 19; hour++) {
+      slots.push(`${hour.toString().padStart(2, '0')}:00`);
+      slots.push(`${hour.toString().padStart(2, '0')}:30`);
+    }
+    return slots;
+  }, []);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('pt-BR', {
@@ -77,7 +92,7 @@ export default function AgendaPage() {
     setSelectedDate(newDate);
   };
 
-  const getAppointmentStyle = (startTime: string, duration: number) => {
+  const getAppointmentStyle = useCallback((startTime: string, duration: number) => {
     const [hour, minute] = startTime.split(':').map(Number);
     const startMinutes = hour * 60 + minute;
     const startIndex = (startMinutes - 8 * 60) / 30;
@@ -87,9 +102,94 @@ export default function AgendaPage() {
       gridRowStart: startIndex + 1,
       gridRowEnd: startIndex + slots + 1,
     };
-  };
+  }, []);
 
-  const getStatusColor = (status: string) => {
+  // Drag and Drop handlers (otimizados com useCallback)
+  const handleDragStart = useCallback((e: React.DragEvent, appointmentId: string) => {
+    setDraggedAppointmentId(appointmentId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', appointmentId);
+    const target = e.target as HTMLElement;
+    target.style.opacity = '0.4';
+    target.style.cursor = 'grabbing';
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    const target = e.target as HTMLElement;
+    target.style.opacity = '1';
+    target.style.cursor = 'grab';
+    setDraggedAppointmentId(null);
+    setDropTarget(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, time: string, professionalId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent, time: string, professionalId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Usa requestAnimationFrame para suavizar atualização visual
+    requestAnimationFrame(() => {
+      setDropTarget({ time, professionalId });
+    });
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Só limpa se realmente saiu do elemento (não é um filho)
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      requestAnimationFrame(() => {
+        setDropTarget(null);
+      });
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, time: string, professionalId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (draggedAppointmentId) {
+      // Busca o appointment atual pelo ID
+      setAppointments(prevAppointments => {
+        const draggedAppointment = prevAppointments.find(apt => apt.id === draggedAppointmentId);
+        
+        if (draggedAppointment) {
+          // Verifica se houve mudança real
+          const hasChanged = draggedAppointment.startTime !== time || draggedAppointment.professionalId !== professionalId;
+          
+          if (hasChanged) {
+            // Feedback visual
+            const professional = professionals.find(p => p.id === professionalId);
+            const fromProfessional = professionals.find(p => p.id === draggedAppointment.professionalId);
+            
+            if (draggedAppointment.professionalId === professionalId) {
+              console.log(`✓ Agendamento de ${draggedAppointment.client} movido de ${draggedAppointment.startTime} para ${time}`);
+            } else {
+              console.log(`✓ Agendamento de ${draggedAppointment.client} transferido de ${fromProfessional?.name} (${draggedAppointment.startTime}) para ${professional?.name} (${time})`);
+            }
+            
+            // Retorna novo array com appointment atualizado
+            return prevAppointments.map(apt => 
+              apt.id === draggedAppointmentId
+                ? { ...apt, startTime: time, professionalId: professionalId }
+                : apt
+            );
+          }
+        }
+        return prevAppointments;
+      });
+    }
+    
+    setDraggedAppointmentId(null);
+    setDropTarget(null);
+  }, [draggedAppointmentId, professionals]);
+
+  const getStatusColor = useCallback((status: string) => {
     switch (status) {
       case 'confirmed':
         return 'bg-green-500 border-green-600';
@@ -100,7 +200,7 @@ export default function AgendaPage() {
       default:
         return 'bg-neutral-500 border-neutral-600';
     }
-  };
+  }, []);
 
   const todayStats = {
     total: 12,
@@ -111,6 +211,18 @@ export default function AgendaPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Drag Feedback Banner */}
+      {draggedAppointmentId && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center space-x-3">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+          </svg>
+          <span className="font-semibold">
+            Movendo: {appointments.find(a => a.id === draggedAppointmentId)?.client}
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -188,59 +300,89 @@ export default function AgendaPage() {
             </div>
 
             {/* Grid de horários */}
-            <div className="relative">
-              {/* Linhas de horário */}
-              <div className="grid grid-cols-[80px_repeat(4,1fr)]">
-                {timeSlots.map((time, index) => (
-                  <div key={time} className="contents">
+            <div className="relative bg-white">
+              <div className="grid grid-cols-[80px_repeat(4,1fr)]" style={{ gridAutoRows: '40px' }}>
+                {timeSlots.map((time, timeIndex) => (
+                  <div key={`row-${time}`} className="contents">
                     {/* Coluna de horário */}
-                    <div className={`p-2 text-xs text-neutral-600 text-center border-r border-b border-neutral-200 ${index % 2 === 0 ? 'bg-neutral-50' : 'bg-white'}`}>
-                      {index % 2 === 0 ? time : ''}
+                    <div className={`p-2 text-xs text-neutral-600 text-center border-r border-b border-neutral-200 flex items-center justify-center ${timeIndex % 2 === 0 ? 'bg-neutral-50' : 'bg-white'}`}>
+                      {timeIndex % 2 === 0 ? time : ''}
                     </div>
                     
                     {/* Colunas dos profissionais */}
-                    {professionals.map((prof) => (
-                      <div
-                        key={`${time}-${prof.id}`}
-                        className={`relative border-r border-b border-neutral-200 last:border-r-0 hover:bg-blue-50 cursor-pointer transition-colors ${index % 2 === 0 ? 'bg-neutral-50/50' : 'bg-white'}`}
-                        style={{ minHeight: '40px' }}
-                        onClick={() => console.log('Novo agendamento', time, prof.name)}
-                      />
-                    ))}
+                    {professionals.map((prof) => {
+                      const isDropTarget = dropTarget?.time === time && dropTarget?.professionalId === prof.id;
+                      const isDragInProgress = draggedAppointmentId !== null;
+                      
+                      // Encontrar agendamento que começa neste horário para este profissional
+                      const appointmentAtThisSlot = appointments.find(
+                        apt => apt.professionalId === prof.id && apt.startTime === time
+                      );
+                      
+                      // Calcular quantas linhas o agendamento ocupa
+                      const rowSpan = appointmentAtThisSlot ? Math.ceil(appointmentAtThisSlot.duration / 30) : 1;
+                      
+                      return (
+                        <div
+                          key={`${time}-${prof.id}`}
+                          className={`relative border-r border-b border-neutral-200 last:border-r-0 ${
+                            timeIndex % 2 === 0 ? 'bg-neutral-50/50' : 'bg-white'
+                          } ${
+                            isDropTarget 
+                              ? 'bg-blue-100 ring-1 ring-blue-400 ring-inset' 
+                              : isDragInProgress
+                              ? 'hover:bg-blue-50 cursor-copy'
+                              : 'hover:bg-blue-50 cursor-pointer'
+                          }`}
+                          onClick={() => !isDragInProgress && console.log('Novo agendamento', time, prof.name)}
+                          onDragOver={(e) => handleDragOver(e, time, prof.id)}
+                          onDragEnter={(e) => handleDragEnter(e, time, prof.id)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, time, prof.id)}
+                        >
+                          {/* Renderizar appointment se existir e começar aqui */}
+                          {appointmentAtThisSlot && (
+                            <div
+                              key={`apt-${appointmentAtThisSlot.id}-${appointmentAtThisSlot.startTime}-${appointmentAtThisSlot.professionalId}`}
+                              draggable
+                              onDragStart={(e) => {
+                                e.stopPropagation();
+                                handleDragStart(e, appointmentAtThisSlot.id);
+                              }}
+                              onDragEnd={handleDragEnd}
+                              className={`absolute inset-1 rounded-lg p-2 border-2 shadow-lg cursor-grab hover:shadow-xl transition-shadow z-20 will-change-transform ${getStatusColor(appointmentAtThisSlot.status)} ${
+                                draggedAppointmentId === appointmentAtThisSlot.id ? 'opacity-50' : 'opacity-100'
+                              }`}
+                              style={{
+                                height: `calc(${rowSpan * 40}px - 8px)`,
+                                transform: 'translate3d(0, 0, 0)', // Força aceleração GPU
+                                backfaceVisibility: 'hidden', // Otimiza rendering
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                console.log('Detalhes', appointmentAtThisSlot);
+                              }}
+                              title={`Arraste para mover ${appointmentAtThisSlot.client} para outro horário ou profissional`}
+                            >
+                              <div className="text-white select-none h-full overflow-hidden">
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="font-semibold text-sm truncate">{appointmentAtThisSlot.client}</p>
+                                  <svg className="w-4 h-4 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                  </svg>
+                                </div>
+                                <p className="text-xs opacity-90 truncate">{appointmentAtThisSlot.service}</p>
+                                <p className="text-xs opacity-75 mt-1">
+                                  {appointmentAtThisSlot.startTime} ({appointmentAtThisSlot.duration}min)
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
-              </div>
-
-              {/* Appointments overlay */}
-              <div className="absolute top-0 left-0 right-0 pointer-events-none">
-                <div className="grid grid-cols-[80px_repeat(4,1fr)] h-full">
-                  <div /> {/* Coluna de horário */}
-                  {professionals.map((prof, profIndex) => (
-                    <div key={prof.id} className="relative" style={{ gridColumn: profIndex + 2 }}>
-                      {appointments
-                        .filter(apt => apt.professionalId === prof.id)
-                        .map((apt) => (
-                          <div
-                            key={apt.id}
-                            className={`absolute left-1 right-1 rounded-lg p-2 border-2 shadow-lg pointer-events-auto cursor-pointer hover:shadow-xl transition-shadow ${getStatusColor(apt.status)}`}
-                            style={{
-                              ...getAppointmentStyle(apt.startTime, apt.duration),
-                              top: 0,
-                            }}
-                            onClick={() => console.log('Detalhes', apt)}
-                          >
-                            <div className="text-white">
-                              <p className="font-semibold text-sm truncate">{apt.client}</p>
-                              <p className="text-xs opacity-90 truncate">{apt.service}</p>
-                              <p className="text-xs opacity-75 mt-1">
-                                {apt.startTime} ({apt.duration}min)
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>

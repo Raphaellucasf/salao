@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env
+.env.local
+.env.development
+.env.production
 
 # vercel
 .vercel
@@ -39,3 +43,26 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Database files with sensitive data
+/database/*.sql
+!/database/README.md
+/database/seed*.sql
+/database/create_*.sql
+/database/fix_*.sql
+/database/insert_*.sql
+/database/update_*.sql
+
+# Log files
+*.log
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
