@@ -1,12 +1,11 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
-import { Scissors } from 'lucide-react';
 
 interface ServicoModalProps {
   isOpen: boolean;
@@ -15,59 +14,66 @@ interface ServicoModalProps {
   onSuccess?: () => void;
 }
 
-const CATEGORIAS = [
-  'Cabelo',
-  'Estética Facial',
-  'Estética Corporal',
-  'Manicure',
-  'Pedicure',
-  'Depilação',
-  'Maquiagem',
-  'Micropigmentação',
-  'Massagem',
-  'Sobrancelha',
-  'Cílios',
-  'Outros'
-];
-
 export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoModalProps) {
+  const [codigo, setCodigo] = useState('');
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [categoria, setCategoria] = useState('Cabelo');
+  const [categoria, setCategoria] = useState('');
   const [duracao, setDuracao] = useState('60');
   const [preco, setPreco] = useState('');
   const [comissao, setComissao] = useState('50');
   const [ativo, setAtivo] = useState(true);
   const [observacoes, setObservacoes] = useState('');
+  const [grupoId, setGrupoId] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (servico) {
-      setNome(servico.nome || '');
-      setDescricao(servico.descricao || '');
-      setCategoria(servico.categoria || 'Cabelo');
-      setDuracao(String(servico.duracao || 60));
-      setPreco(String(servico.preco || ''));
-      setComissao(String(servico.comissao || 50));
-      setAtivo(servico.ativo !== false);
-      setObservacoes(servico.observacoes || '');
-    } else {
-      resetForm();
-    }
-  }, [servico, isOpen]);
+  // Calcular valores de comissão (memoizado)
+  const valoresCalculados = useMemo(() => {
+    const precoNum = parseFloat(preco) || 0;
+    const comissaoNum = parseFloat(comissao) || 0;
+    const valorComissao = (precoNum * comissaoNum) / 100;
+    const valorSalao = precoNum - valorComissao;
+    return { valorComissao, valorSalao };
+  }, [preco, comissao]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
+    setCodigo('');
     setNome('');
     setDescricao('');
-    setCategoria('Cabelo');
+    setCategoria('');
     setDuracao('60');
     setPreco('');
     setComissao('50');
     setAtivo(true);
     setObservacoes('');
-  };
+    setGrupoId('');
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    if (servico) {
+      setCodigo(servico.codigo || '');
+      setNome(servico.nome || '');
+      setDescricao(servico.descricao || '');
+      setCategoria(servico.categoria || '');
+      setDuracao(String(servico.duracao_minutos || servico.duracao || 60));
+      setPreco(String(servico.preco || ''));
+      setComissao(String(servico.comissao || 50));
+      setAtivo(servico.ativo !== false);
+      setObservacoes(servico.observacoes || '');
+      setGrupoId(servico.grupo_id || '');
+    } else {
+      resetForm();
+    }
+  }, [servico, isOpen, resetForm]);
+
+  const handleClose = useCallback(() => {
+    resetForm();
+    onClose();
+  }, [resetForm, onClose]);
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!nome || !preco) {
@@ -75,22 +81,28 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
       return;
     }
 
+    if (!grupoId) {
+      alert('É necessário selecionar um grupo para o serviço');
+      return;
+    }
+
     try {
       setLoading(true);
 
       const dados = {
+        codigo: codigo || null,
         nome,
         descricao,
-        categoria,
-        duracao: parseInt(duracao),
+        categoria: categoria || null,
+        duracao_minutos: parseInt(duracao),
         preco: parseFloat(preco),
         comissao: parseFloat(comissao),
         ativo,
-        observacoes
+        observacoes,
+        grupo_id: grupoId
       };
 
       if (servico?.id) {
-        // Atualizar
         const { error } = await supabase
           .from('servicos')
           .update(dados)
@@ -99,7 +111,6 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         if (error) throw error;
         alert('Serviço atualizado com sucesso!');
       } else {
-        // Criar novo
         const { error } = await supabase
           .from('servicos')
           .insert(dados);
@@ -116,12 +127,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleClose = () => {
-    resetForm();
-    onClose();
-  };
+  }, [nome, preco, grupoId, codigo, descricao, categoria, duracao, comissao, ativo, observacoes, servico, onSuccess, handleClose]);
 
   return (
     <Modal 
@@ -130,6 +136,21 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
       title={servico ? 'Editar Serviço' : 'Novo Serviço'}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Código */}
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Código (opcional)
+          </label>
+          <Input
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value)}
+            placeholder="Ex: 001, SRV-123"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Código interno para identificação
+          </p>
+        </div>
+
         {/* Nome */}
         <div>
           <label className="block text-sm font-medium mb-1">
@@ -146,20 +167,16 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         {/* Categoria */}
         <div>
           <label className="block text-sm font-medium mb-1">
-            Categoria *
+            Categoria (opcional)
           </label>
-          <select
+          <Input
             value={categoria}
             onChange={(e) => setCategoria(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg"
-            required
-          >
-            {CATEGORIAS.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+            placeholder="Ex: Química, Hidratação, Corte..."
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Subcategoria dentro do grupo (opcional)
+          </p>
         </div>
 
         {/* Duração e Preço */}
@@ -256,7 +273,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         </div>
 
         {/* Preview do Valor da Comissão */}
-        {preco && comissao && (
+        {preco && comissao && valoresCalculados.valorComissao > 0 && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm font-medium text-blue-900 mb-1">
               Valores calculados:
@@ -265,13 +282,13 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
               <div>
                 <span className="text-gray-600">Comissão profissional:</span>
                 <span className="ml-2 font-bold text-blue-600">
-                  R$ {(parseFloat(preco) * parseFloat(comissao) / 100).toFixed(2)}
+                  R$ {valoresCalculados.valorComissao.toFixed(2)}
                 </span>
               </div>
               <div>
                 <span className="text-gray-600">Valor salão:</span>
                 <span className="ml-2 font-bold text-green-600">
-                  R$ {(parseFloat(preco) * (100 - parseFloat(comissao)) / 100).toFixed(2)}
+                  R$ {valoresCalculados.valorSalao.toFixed(2)}
                 </span>
               </div>
             </div>
