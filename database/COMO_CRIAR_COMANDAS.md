@@ -3,7 +3,12 @@
 ## Problema
 A tabela `comandas` não existe no banco de dados Supabase.
 
-## Solução
+## ✅ Solução - TIPOS CORRIGIDOS
+
+**ATUALIZAÇÃO:** O script foi corrigido para usar os tipos de dados corretos:
+- `cliente_id` → **BIGINT** (compatível com `clientes.id`)
+- `profissional_id` → **UUID** (compatível com `usuarios.id`)
+- `item_id` → **TEXT** (armazena IDs de serviços/produtos)
 
 ### Passo 1: Acessar o Supabase SQL Editor
 1. Acesse [https://supabase.com/dashboard](https://supabase.com/dashboard)
