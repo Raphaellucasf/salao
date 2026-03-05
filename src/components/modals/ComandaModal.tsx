@@ -230,10 +230,14 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         // Inserir novos itens
         const { error: itensError } = await supabase
           .from('comanda_itens')
-          .insert(itens.map(item => ({
-            comanda_id: comandaId,
-            ...item,
-          })));
+          .insert(itens.map(item => {
+            const { id, ...itemData } = item; // Remove o id temporário
+            return {
+              comanda_id: comandaId,
+              ...itemData,
+              item_id: itemData.item_id ? String(itemData.item_id) : null, // Converte para string
+            };
+          }));
 
         if (itensError) throw itensError;
       } else {
@@ -256,10 +260,14 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         // Inserir itens
         const { error: itensError } = await supabase
           .from('comanda_itens')
-          .insert(itens.map(item => ({
-            comanda_id: novaComanda.id,
-            ...item,
-          })));
+          .insert(itens.map(item => {
+            const { id, ...itemData } = item; // Remove o id temporário
+            return {
+              comanda_id: novaComanda.id,
+              ...itemData,
+              item_id: itemData.item_id ? String(itemData.item_id) : null, // Converte para string
+            };
+          }));
 
         if (itensError) throw itensError;
       }
