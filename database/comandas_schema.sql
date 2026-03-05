@@ -81,16 +81,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Função para auto-gerar número da comanda antes de inserir
+CREATE OR REPLACE FUNCTION set_numero_comanda()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.numero_comanda IS NULL OR NEW.numero_comanda = 0 THEN
+    NEW.numero_comanda := gerar_numero_comanda();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para gerar número da comanda automaticamente
+DROP TRIGGER IF EXISTS trigger_set_numero_comanda ON comandas;
+CREATE TRIGGER trigger_set_numero_comanda
+  BEFORE INSERT ON comandas
+  FOR EACH ROW
+  EXECUTE FUNCTION set_numero_comanda();
+
 -- Habilitar RLS (Row Level Security)
 ALTER TABLE comandas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comanda_itens ENABLE ROW LEVEL SECURITY;
 
--- Políticas de acesso (permitir tudo para usuários autenticados)
+-- Políticas de acesso (permitir tudo para usuários autenticados e anônimos)
 DROP POLICY IF EXISTS "Permitir tudo em comandas para usuários autenticados" ON comandas;
 CREATE POLICY "Permitir tudo em comandas para usuários autenticados"
   ON comandas
   FOR ALL
-  TO authenticated
   USING (true)
   WITH CHECK (true);
 
@@ -98,7 +115,6 @@ DROP POLICY IF EXISTS "Permitir tudo em comanda_itens para usuários autenticado
 CREATE POLICY "Permitir tudo em comanda_itens para usuários autenticados"
   ON comanda_itens
   FOR ALL
-  TO authenticated
   USING (true)
   WITH CHECK (true);
 

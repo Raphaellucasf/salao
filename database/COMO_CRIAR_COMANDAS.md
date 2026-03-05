@@ -1,11 +1,29 @@
 # 🔧 RESOLVER ERRO: "Could not find the table 'public.comandas'"
 
-## Problema
-A tabela `comandas` não existe no banco de dados Supabase.
+## ⚠️ NOVO ERRO: "new row violates row-level security policy"
 
-## ✅ Solução - TIPOS CORRIGIDOS
+Se você já executou o `comandas_schema.sql` mas está vendo este erro no app, execute o **FIX RÁPIDO** abaixo.
 
-**ATUALIZAÇÃO:** O script foi corrigido para usar os tipos de dados corretos:
+### 🚀 FIX RÁPIDO (Execute isto no Supabase agora):
+
+1. Acesse [https://supabase.com/dashboard](https://supabase.com/dashboard)
+2. Vá em **SQL Editor** → **New Query**  
+3. Copie e cole o conteúdo de **[fix_comandas_rls.sql](fix_comandas_rls.sql)**
+4. Clique em **Run**
+
+**O que este fix faz:**
+- ✅ Corrige políticas RLS (permite inserções para todos usuários autenticados)
+- ✅ Cria trigger para gerar `numero_comanda` automaticamente
+- ✅ Remove restrições `TO authenticated` que estavam bloqueando
+
+---
+
+## Problema Original
+A tabela `comandas` não existia no banco de dados Supabase.
+
+## ✅ Solução Completa - TIPOS CORRIGIDOS
+
+**Tipos de dados corretos:**
 - `cliente_id` → **BIGINT** (compatível com `clientes.id`)
 - `profissional_id` → **UUID** (compatível com `usuarios.id`)
 - `item_id` → **TEXT** (armazena IDs de serviços/produtos)
