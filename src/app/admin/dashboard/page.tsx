@@ -193,31 +193,6 @@ export default function AdminDashboard() {
         </Link>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={stat.name} padding="lg" hover>
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-sm text-neutral-600">{stat.name}</p>
-                  <p className="text-2xl font-bold text-neutral-900 mt-1">
-                    {stat.value}
-                  </p>
-                  <p className="text-sm text-green-600 mt-1 font-medium">
-                    {stat.change}
-                  </p>
-                </div>
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center`}>
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Próximos Agendamentos */}
@@ -280,6 +255,31 @@ export default function AdminDashboard() {
             ))}
           </div>
         </Card>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Card key={stat.name} padding="lg" hover>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="text-sm text-neutral-600">{stat.name}</p>
+                  <p className="text-2xl font-bold text-neutral-900 mt-1">
+                    {stat.value}
+                  </p>
+                  <p className="text-sm text-green-600 mt-1 font-medium">
+                    {stat.change}
+                  </p>
+                </div>
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center`}>
+                  <Icon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
