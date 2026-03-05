@@ -5,9 +5,9 @@
 
 -- TABELA DE COMANDAS
 CREATE TABLE IF NOT EXISTS comandas (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  numero_comanda INTEGER NOT NULL,
-  cliente_id UUID REFERENCES clientes(id),
+  id BIGSERIAL PRIMARY KEY,
+  numero_comanda INTEGER NOT NULL UNIQUE,
+  cliente_id BIGINT REFERENCES clientes(id),
   cliente_nome VARCHAR(255),
   profissional_id UUID REFERENCES usuarios(id),
   status VARCHAR(20) DEFAULT 'aberta' CHECK (status IN ('aberta', 'fechada', 'cancelada')),
@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS comandas (
 
 -- ITENS DA COMANDA
 CREATE TABLE IF NOT EXISTS comanda_itens (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  comanda_id UUID REFERENCES comandas(id) ON DELETE CASCADE,
+  id BIGSERIAL PRIMARY KEY,
+  comanda_id BIGINT REFERENCES comandas(id) ON DELETE CASCADE,
   tipo VARCHAR(20) CHECK (tipo IN ('servico', 'produto', 'pacote')),
-  item_id UUID,
+  item_id TEXT, -- Armazena o ID como texto (pode ser UUID de serviço ou BIGINT de produto)
   descricao VARCHAR(255) NOT NULL,
   quantidade DECIMAL(10,2) DEFAULT 1,
   valor_unitario DECIMAL(10,2) NOT NULL,
@@ -44,6 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_comanda_itens_comanda ON comanda_itens(comanda_id
 -- Comentários
 COMMENT ON TABLE comandas IS 'Comandas abertas no salão para controle de consumo';
 COMMENT ON TABLE comanda_itens IS 'Itens adicionados às comandas (serviços, produtos, pacotes)';
+COMMENT ON COLUMN comanda_itens.item_id IS 'ID do item (UUID para serviços, BIGINT para produtos) - armazenado como texto';
 
 -- Função para atualizar updated_at automaticamente
 CREATE OR REPLACE FUNCTION update_comandas_updated_at()
