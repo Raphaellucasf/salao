@@ -1,10 +1,28 @@
 # 🔧 RESOLVER ERRO: "Could not find the table 'public.comandas'"
 
-## ⚠️ NOVO ERRO: "new row violates row-level security policy"
+## ⚠️ ÚLTIMO ERRO: "invalid input syntax for type bigint: UUID..."
 
-Se você já executou o `comandas_schema.sql` mas está vendo este erro no app, execute o **FIX RÁPIDO** abaixo.
+Se você vê este erro, significa que a coluna `item_id` ainda está como BIGINT em vez de TEXT.
 
-### 🚀 FIX RÁPIDO (Execute isto no Supabase agora):
+### 🚀 FIX FINAL (Execute isto AGORA no Supabase):
+
+1. Acesse [https://supabase.com/dashboard](https://supabase.com/dashboard)
+2. Vá em **SQL Editor** → **New Query**  
+3. Copie e cole o conteúdo de **[fix_item_id_text.sql](fix_item_id_text.sql)**
+4. Clique em **Run**
+
+**O que este fix faz:**
+- ✅ Converte `comanda_itens.item_id` de BIGINT para TEXT
+- ✅ Remove constraint de foreign key (não precisamos)
+- ✅ Permite armazenar UUIDs e BIGINTs como texto
+
+---
+
+## ⚠️ ERRO ANTERIOR: "new row violates row-level security policy"
+
+Se você já executou o `comandas_schema.sql` mas viu este erro, execute o **fix_comandas_rls.sql**.
+
+### 🚀 FIX RLS:
 
 1. Acesse [https://supabase.com/dashboard](https://supabase.com/dashboard)
 2. Vá em **SQL Editor** → **New Query**  
@@ -27,6 +45,20 @@ A tabela `comandas` não existia no banco de dados Supabase.
 - `cliente_id` → **BIGINT** (compatível com `clientes.id`)
 - `profissional_id` → **UUID** (compatível com `usuarios.id`)
 - `item_id` → **TEXT** (armazena IDs de serviços/produtos)
+
+---
+
+## 📋 ORDEM DE EXECUÇÃO DOS SCRIPTS:
+
+**Se está começando do zero:**
+1. Execute **[comandas_schema.sql](comandas_schema.sql)** - Cria as tabelas
+2. Execute **[fix_comandas_rls.sql](fix_comandas_rls.sql)** - Corrige RLS
+3. Execute **[fix_item_id_text.sql](fix_item_id_text.sql)** - Converte item_id para TEXT
+
+**Se já criou as tabelas mas tem erro:**
+- Erro de "table not found" → Execute `comandas_schema.sql`
+- Erro de "row-level security" → Execute `fix_comandas_rls.sql`
+- Erro de "invalid input syntax for type bigint" → Execute `fix_item_id_text.sql`
 
 ### Passo 1: Acessar o Supabase SQL Editor
 1. Acesse [https://supabase.com/dashboard](https://supabase.com/dashboard)
