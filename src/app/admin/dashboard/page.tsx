@@ -10,7 +10,8 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  ClipboardList
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -223,7 +224,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Quick Access Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Link href="/admin/agenda">
           <Card padding="lg" hover className="cursor-pointer">
             <div className="flex items-center space-x-4">
@@ -247,6 +248,20 @@ export default function AdminDashboard() {
               <div>
                 <h3 className="font-semibold text-neutral-900">Clientes</h3>
                 <p className="text-sm text-neutral-600">Gerenciar cadastros</p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link href="/admin/comandas">
+          <Card padding="lg" hover className="cursor-pointer">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-accent-100 rounded-xl flex items-center justify-center">
+                <ClipboardList className="w-6 h-6 text-accent-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-neutral-900">Comandas</h3>
+                <p className="text-sm text-neutral-600">Abrir/gerenciar (F8)</p>
               </div>
             </div>
           </Card>
