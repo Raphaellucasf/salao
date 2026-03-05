@@ -64,7 +64,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     try {
       const [clientesData, produtosData, servicosData, pacotesData] = await Promise.all([
         supabase.from('clientes').select('*').order('nome'),
-        supabase.from('produtos').select('*').eq('categoria', 'revenda').order('nome'),
+        supabase.from('produtos').select('*').order('nome'),
         supabase.from('servicos').select('*').order('nome'),
         supabase.from('pacotes').select('*').eq('ativo', true).order('nome'),
       ]);
@@ -133,8 +133,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           ...novoItem,
           item_id: item.id,
           descricao: item.nome,
-          valor_unitario: item.preco_venda || 0,
-          valor_total: (item.preco_venda || 0) * novoItem.quantidade,
+          valor_unitario: item.preco || 0,
+          valor_total: (item.preco || 0) * novoItem.quantidade,
         });
       }
     } else if (tipo === 'servico') {
@@ -359,7 +359,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               >
                 <option value="">Selecione...</option>
                 {novoItem.tipo === 'produto' && produtos.map(p => (
-                  <option key={p.id} value={p.id}>{p.nome} - R$ {p.preco_venda}</option>
+                  <option key={p.id} value={p.id}>{p.nome} - R$ {p.preco?.toFixed(2) || '0.00'}</option>
                 ))}
                 {novoItem.tipo === 'servico' && servicos.map(s => (
                   <option key={s.id} value={s.id}>{s.nome} - R$ {s.preco}</option>
