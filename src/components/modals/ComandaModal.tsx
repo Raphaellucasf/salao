@@ -34,6 +34,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
   const [servicos, setServicos] = useState<any[]>([]);
   const [pacotes, setPacotes] = useState<any[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
+  const [auxiliares, setAuxiliares] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     cliente_id: '',
@@ -70,14 +71,19 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         supabase.from('produtos').select('*').order('nome'),
         supabase.from('servicos').select('*').order('nome'),
         supabase.from('pacotes').select('*').eq('ativo', true).order('nome'),
-        supabase.from('usuarios').select('id, nome').eq('tipo', 'profissional').order('nome'),
+        supabase.from('profissionais').select('id, nome, é_auxiliar').eq('ativo', true).order('nome'),
       ]);
 
       if (clientesData.data) setClientes(clientesData.data);
       if (produtosData.data) setProdutos(produtosData.data);
       if (servicosData.data) setServicos(servicosData.data);
       if (pacotesData.data) setPacotes(pacotesData.data);
-      if (profissionaisData.data) setProfissionais(profissionaisData.data);
+      if (profissionaisData.data) {
+        // Todos os profissionais (incluindo os que não são auxiliares)
+        setProfissionais(profissionaisData.data);
+        // Apenas profissionais que também são auxiliares
+        setAuxiliares(profissionaisData.data.filter(p => p.é_auxiliar));
+      }
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
     }
@@ -376,9 +382,9 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Selecione o auxiliar</option>
-              {profissionais.map(prof => (
-                <option key={prof.id} value={prof.id}>
-                  {prof.nome}
+              {auxiliares.map(aux => (
+                <option key={aux.id} value={aux.id}>
+                  {aux.nome}
                 </option>
               ))}
             </select>

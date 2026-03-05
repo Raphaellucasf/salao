@@ -61,6 +61,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     dias_trabalho: [] as number[],
     hora_inicio: '09:00',
     hora_fim: '18:00',
+    é_auxiliar: false,
     ativo: true,
     observacoes: '',
   });
@@ -86,6 +87,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           dias_trabalho: profissional.dias_trabalho || [1, 2, 3, 4, 5],
           hora_inicio: profissional.hora_inicio || '09:00',
           hora_fim: profissional.hora_fim || '18:00',
+          é_auxiliar: profissional.é_auxiliar || false,
           ativo: profissional.ativo !== false,
           observacoes: profissional.observacoes || '',
         });
@@ -114,6 +116,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
       dias_trabalho: [1, 2, 3, 4, 5], // Segunda a Sexta por padrão
       hora_inicio: '09:00',
       hora_fim: '18:00',
+      é_auxiliar: false,
       ativo: true,
       observacoes: '',
     });
@@ -466,17 +469,32 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
 
         {/* Status */}
         <div className="border-t pt-6">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="ativo"
-              checked={formData.ativo}
-              onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
-              className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
-            />
-            <label htmlFor="ativo" className="text-sm font-medium text-neutral-700">
-              Profissional Ativo
-            </label>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="ativo"
+                checked={formData.ativo}
+                onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
+                className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
+              />
+              <label htmlFor="ativo" className="text-sm font-medium text-neutral-700">
+                Profissional Ativo
+              </label>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="é_auxiliar"
+                checked={formData.é_auxiliar}
+                onChange={(e) => setFormData({ ...formData, é_auxiliar: e.target.checked })}
+                className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
+              />
+              <label htmlFor="é_auxiliar" className="text-sm font-medium text-neutral-700">
+                Atua como Auxiliar
+              </label>
+            </div>
           </div>
         </div>
 
