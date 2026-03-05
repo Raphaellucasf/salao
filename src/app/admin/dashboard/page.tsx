@@ -134,6 +134,65 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Quick Access Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Link href="/admin/agenda">
+          <Card padding="lg" hover className="cursor-pointer">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <Calendar className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-neutral-900">Ver Agenda</h3>
+                <p className="text-sm text-neutral-600">Timeline completa</p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link href="/admin/clientes">
+          <Card padding="lg" hover className="cursor-pointer">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <Users className="w-6 h-6 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-neutral-900">Clientes</h3>
+                <p className="text-sm text-neutral-600">Gerenciar cadastros</p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link href="/admin/comandas">
+          <Card padding="lg" hover className="cursor-pointer">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-accent-100 rounded-xl flex items-center justify-center">
+                <ClipboardList className="w-6 h-6 text-accent-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-neutral-900">Comandas</h3>
+                <p className="text-sm text-neutral-600">Abrir/gerenciar (F8)</p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link href="/admin/financeiro">
+          <Card padding="lg" hover className="cursor-pointer">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-neutral-900">Financeiro</h3>
+                <p className="text-sm text-neutral-600">Relatórios e caixa</p>
+              </div>
+            </div>
+          </Card>
+        </Link>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => {
@@ -221,65 +280,6 @@ export default function AdminDashboard() {
             ))}
           </div>
         </Card>
-      </div>
-
-      {/* Quick Access Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link href="/admin/agenda">
-          <Card padding="lg" hover className="cursor-pointer">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-neutral-900">Ver Agenda</h3>
-                <p className="text-sm text-neutral-600">Timeline completa</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-
-        <Link href="/admin/clientes">
-          <Card padding="lg" hover className="cursor-pointer">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-neutral-900">Clientes</h3>
-                <p className="text-sm text-neutral-600">Gerenciar cadastros</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-
-        <Link href="/admin/comandas">
-          <Card padding="lg" hover className="cursor-pointer">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-accent-100 rounded-xl flex items-center justify-center">
-                <ClipboardList className="w-6 h-6 text-accent-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-neutral-900">Comandas</h3>
-                <p className="text-sm text-neutral-600">Abrir/gerenciar (F8)</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-
-        <Link href="/admin/financeiro">
-          <Card padding="lg" hover className="cursor-pointer">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-neutral-900">Financeiro</h3>
-                <p className="text-sm text-neutral-600">Relatórios e caixa</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
       </div>
     </div>
   );
