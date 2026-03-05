@@ -33,10 +33,13 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
   const [produtos, setProdutos] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
   const [pacotes, setPacotes] = useState<any[]>([]);
+  const [profissionais, setProfissionais] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     cliente_id: '',
     cliente_nome: '',
+    profissional_id: '',
+    auxiliar_id: '',
     observacoes: '',
   });
 
@@ -62,17 +65,19 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
   const loadData = async () => {
     try {
-      const [clientesData, produtosData, servicosData, pacotesData] = await Promise.all([
+      const [clientesData, produtosData, servicosData, pacotesData, profissionaisData] = await Promise.all([
         supabase.from('clientes').select('*').order('nome'),
         supabase.from('produtos').select('*').order('nome'),
         supabase.from('servicos').select('*').order('nome'),
         supabase.from('pacotes').select('*').eq('ativo', true).order('nome'),
+        supabase.from('usuarios').select('id, nome').eq('tipo', 'profissional').order('nome'),
       ]);
 
       if (clientesData.data) setClientes(clientesData.data);
       if (produtosData.data) setProdutos(produtosData.data);
       if (servicosData.data) setServicos(servicosData.data);
       if (pacotesData.data) setPacotes(pacotesData.data);
+      if (profissionaisData.data) setProfissionais(profissionaisData.data);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
     }
@@ -93,6 +98,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       setFormData({
         cliente_id: comanda.cliente_id || '',
         cliente_nome: comanda.cliente_nome || '',
+        profissional_id: comanda.profissional_id || '',
+        auxiliar_id: comanda.auxiliar_id || '',
         observacoes: comanda.observacoes || '',
       });
 
@@ -106,6 +113,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     setFormData({
       cliente_id: '',
       cliente_nome: '',
+      profissional_id: '',
+      auxiliar_id: '',
       observacoes: '',
     });
     setItens([]);
@@ -217,6 +226,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           .update({
             cliente_id: formData.cliente_id || null,
             cliente_nome: cliente?.nome || formData.cliente_nome,
+            profissional_id: formData.profissional_id || null,
+            auxiliar_id: formData.auxiliar_id || null,
             total,
             observacoes: formData.observacoes,
           })
@@ -248,6 +259,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             numero_comanda: 0, // Será atualizado por trigger
             cliente_id: formData.cliente_id || null,
             cliente_nome: cliente?.nome || formData.cliente_nome,
+            profissional_id: formData.profissional_id || null,
+            auxiliar_id: formData.auxiliar_id || null,
             status: 'aberta',
             total,
             observacoes: formData.observacoes,
@@ -331,6 +344,45 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             onChange={(e) => setFormData({ ...formData, cliente_nome: e.target.value })}
             placeholder="Nome do cliente"
           />
+        </div>
+
+        {/* Profissional e Auxiliar */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">
+              Profissional Responsável
+            </label>
+            <select
+              value={formData.profissional_id}
+              onChange={(e) => setFormData({ ...formData, profissional_id: e.target.value })}
+              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Selecione o profissional</option>
+              {profissionais.map(prof => (
+                <option key={prof.id} value={prof.id}>
+                  {prof.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">
+              Auxiliar (opcional)
+            </label>
+            <select
+              value={formData.auxiliar_id}
+              onChange={(e) => setFormData({ ...formData, auxiliar_id: e.target.value })}
+              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Selecione o auxiliar</option>
+              {profissionais.map(prof => (
+                <option key={prof.id} value={prof.id}>
+                  {prof.nome}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Adicionar Item */}
