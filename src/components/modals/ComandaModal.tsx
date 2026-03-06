@@ -38,7 +38,6 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
   const [formData, setFormData] = useState({
     cliente_id: '',
-    cliente_nome: '',
     profissional_id: '',
     auxiliar_id: '',
     observacoes: '',
@@ -103,7 +102,6 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
       setFormData({
         cliente_id: comanda.cliente_id || '',
-        cliente_nome: comanda.cliente_nome || '',
         profissional_id: comanda.profissional_id || '',
         auxiliar_id: comanda.auxiliar_id || '',
         observacoes: comanda.observacoes || '',
@@ -118,7 +116,6 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
   const resetForm = () => {
     setFormData({
       cliente_id: '',
-      cliente_nome: '',
       profissional_id: '',
       auxiliar_id: '',
       observacoes: '',
@@ -231,7 +228,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           .from('comandas')
           .update({
             cliente_id: formData.cliente_id || null,
-            cliente_nome: cliente?.nome || formData.cliente_nome,
+            cliente_nome: cliente?.nome || null,
             profissional_id: formData.profissional_id || null,
             auxiliar_id: formData.auxiliar_id || null,
             total,
@@ -264,7 +261,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           .insert([{
             numero_comanda: 0, // Será atualizado por trigger
             cliente_id: formData.cliente_id || null,
-            cliente_nome: cliente?.nome || formData.cliente_nome,
+            cliente_nome: cliente?.nome || null,
             profissional_id: formData.profissional_id || null,
             auxiliar_id: formData.auxiliar_id || null,
             status: 'aberta',
@@ -324,32 +321,22 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         )}
 
         {/* Cliente */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Cliente (opcional)
-            </label>
-            <select
-              value={formData.cliente_id}
-              onChange={(e) => setFormData({ ...formData, cliente_id: e.target.value })}
-              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="">Selecione um cliente</option>
-              {clientes.map(cliente => (
-                <option key={cliente.id} value={cliente.id}>
-                  {cliente.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <Input
-            label="Ou digite o nome"
-            type="text"
-            value={formData.cliente_nome}
-            onChange={(e) => setFormData({ ...formData, cliente_nome: e.target.value })}
-            placeholder="Nome do cliente"
-          />
+        <div>
+          <label className="block text-sm font-medium text-neutral-700 mb-2">
+            Cliente
+          </label>
+          <select
+            value={formData.cliente_id}
+            onChange={(e) => setFormData({ ...formData, cliente_id: e.target.value })}
+            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          >
+            <option value="">Selecione um cliente</option>
+            {clientes.map(cliente => (
+              <option key={cliente.id} value={cliente.id}>
+                {cliente.nome}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Profissional e Auxiliar */}
