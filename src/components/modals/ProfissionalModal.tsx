@@ -51,6 +51,9 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     cidade: '',
     estado: '',
     cep: '',
+    // Tipo e Cor
+    tipo_contrato: 'contratado' as 'contratado' | 'autonomo' | 'terceirizado',
+    cor_agenda: '#3B82F6',
     // Remuneração
     tem_salario_fixo: false,
     salario_fixo: 0,
@@ -59,8 +62,12 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     // Configurações
     grupos: [] as string[],
     dias_trabalho: [] as number[],
+    horario_personalizado: false,
     hora_inicio: '09:00',
     hora_fim: '18:00',
+    horarios_por_dia: {} as Record<number, {inicio: string, fim: string}>,
+    comissoes_por_grupo: {} as Record<string, {comissao: number, taxa_cartao: string}>,
+    senha_app: '',
     é_auxiliar: false,
     ativo: true,
     observacoes: '',
@@ -79,14 +86,20 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           cidade: profissional.cidade || '',
           estado: profissional.estado || '',
           cep: profissional.cep || '',
+          tipo_contrato: profissional.tipo_contrato || 'contratado',
+          cor_agenda: profissional.cor_agenda || '#3B82F6',
           tem_salario_fixo: profissional.tem_salario_fixo || false,
           salario_fixo: profissional.salario_fixo || 0,
           recebe_comissao: profissional.recebe_comissao !== false,
           percentual_comissao: profissional.percentual_comissao || 50,
           grupos: profissional.grupos || [],
           dias_trabalho: profissional.dias_trabalho || [1, 2, 3, 4, 5],
+          horario_personalizado: profissional.horario_personalizado || false,
           hora_inicio: profissional.hora_inicio || '09:00',
           hora_fim: profissional.hora_fim || '18:00',
+          horarios_por_dia: profissional.horarios_por_dia || {},
+          comissoes_por_grupo: profissional.comissoes_por_grupo || {},
+          senha_app: profissional.senha_app || '',
           é_auxiliar: profissional.é_auxiliar || false,
           ativo: profissional.ativo !== false,
           observacoes: profissional.observacoes || '',
@@ -108,14 +121,20 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
       cidade: '',
       estado: '',
       cep: '',
+      tipo_contrato: 'contratado',
+      cor_agenda: '#3B82F6',
       tem_salario_fixo: false,
       salario_fixo: 0,
       recebe_comissao: true,
       percentual_comissao: 50,
       grupos: [],
       dias_trabalho: [1, 2, 3, 4, 5], // Segunda a Sexta por padrão
+      horario_personalizado: false,
       hora_inicio: '09:00',
       hora_fim: '18:00',
+      horarios_por_dia: {},
+      comissoes_por_grupo: {},
+      senha_app: '',
       é_auxiliar: false,
       ativo: true,
       observacoes: '',
@@ -309,6 +328,47 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           </div>
         </div>
 
+        {/* Configurações Gerais */}
+        <div className="border-t pt-6">
+          <h3 className="font-semibold text-lg text-neutral-900 mb-4">Configurações</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Tipo *
+              </label>
+              <select
+                value={formData.tipo_contrato}
+                onChange={(e) => setFormData({ ...formData, tipo_contrato: e.target.value as any })}
+                className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="contratado">Contratado</option>
+                <option value="autonomo">Autônomo</option>
+                <option value="terceirizado">Terceirizado</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Cor da Agenda
+              </label>
+              <input
+                type="color"
+                value={formData.cor_agenda}
+                onChange={(e) => setFormData({ ...formData, cor_agenda: e.target.value })}
+                className="w-full h-10 px-2 border border-neutral-300 rounded-lg cursor-pointer"
+              />
+            </div>
+
+            <Input
+              label="Senha para Consultas/App"
+              type="password"
+              value={formData.senha_app}
+              onChange={(e) => setFormData({ ...formData, senha_app: e.target.value })}
+              placeholder="Digite a senha"
+            />
+          </div>
+        </div>
+
         {/* Remuneração */}
         <div className="border-t pt-6">
           <h3 className="font-semibold text-lg text-neutral-900 mb-4">Remuneração</h3>
@@ -400,6 +460,73 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
               </label>
             ))}
           </div>
+
+          {/* Tabela de Comissões por Grupo */}
+          {formData.grupos.length > 0 && (
+            <div className="mt-6">
+              <h4 className="text-sm font-semibold text-neutral-900 mb-3">Comissões e Taxas de Cartão por Grupo</h4>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-neutral-100">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-neutral-700">Grupo</th>
+                      <th className="px-4 py-2 text-left font-medium text-neutral-700">Comissão (%)</th>
+                      <th className="px-4 py-2 text-left font-medium text-neutral-700">Taxa Cartão</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formData.grupos.map((grupo) => (
+                      <tr key={grupo} className="border-t">
+                        <td className="px-4 py-2 font-medium text-neutral-900">{grupo}</td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={formData.comissoes_por_grupo[grupo]?.comissao || 0}
+                            onChange={(e) => setFormData({
+                              ...formData,
+                              comissoes_por_grupo: {
+                                ...formData.comissoes_por_grupo,
+                                [grupo]: {
+                                  ...formData.comissoes_por_grupo[grupo],
+                                  comissao: parseFloat(e.target.value) || 0,
+                                  taxa_cartao: formData.comissoes_por_grupo[grupo]?.taxa_cartao || 'sem_tx'
+                                }
+                              }
+                            })}
+                            className="w-24 px-2 py-1 border border-neutral-300 rounded text-sm"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <select
+                            value={formData.comissoes_por_grupo[grupo]?.taxa_cartao || 'sem_tx'}
+                            onChange={(e) => setFormData({
+                              ...formData,
+                              comissoes_por_grupo: {
+                                ...formData.comissoes_por_grupo,
+                                [grupo]: {
+                                  comissao: formData.comissoes_por_grupo[grupo]?.comissao || 0,
+                                  taxa_cartao: e.target.value
+                                }
+                              }
+                            })}
+                            className="w-32 px-2 py-1 border border-neutral-300 rounded text-sm"
+                          >
+                            <option value="sem_tx">SEM TX</option>
+                            <option value="tx_prop">TX PROP</option>
+                            <option value="tx_fixa">TX FIXA</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Dias de Trabalho */}
@@ -407,49 +534,123 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           <h3 className="font-semibold text-lg text-neutral-900 mb-4">Disponibilidade *</h3>
           
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-3">
-                Dias de Trabalho
+            {/* Toggle para horário personalizado */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="horario_personalizado"
+                checked={formData.horario_personalizado}
+                onChange={(e) => setFormData({ ...formData, horario_personalizado: e.target.checked })}
+                className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
+              />
+              <label htmlFor="horario_personalizado" className="text-sm font-medium text-neutral-700">
+                Horário Personalizado por Dia
               </label>
-              <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                {DIAS_SEMANA.map((dia) => (
-                  <label
-                    key={dia.value}
-                    className={`flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all text-center ${
-                      formData.dias_trabalho.includes(dia.value)
-                        ? 'border-primary-500 bg-primary-50'
-                        : 'border-neutral-200 hover:border-neutral-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.dias_trabalho.includes(dia.value)}
-                      onChange={() => toggleDia(dia.value)}
-                      className="sr-only"
-                    />
-                    <span className="text-sm font-medium text-neutral-700">
-                      {dia.label.substring(0, 3)}
-                    </span>
+            </div>
+
+            {!formData.horario_personalizado ? (
+              <>
+                {/* Seleção de dias */}
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-3">
+                    Dias de Trabalho
                   </label>
-                ))}
-              </div>
-            </div>
+                  <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                    {DIAS_SEMANA.map((dia) => (
+                      <label
+                        key={dia.value}
+                        className={`flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all text-center ${
+                          formData.dias_trabalho.includes(dia.value)
+                            ? 'border-primary-500 bg-primary-50'
+                            : 'border-neutral-200 hover:border-neutral-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.dias_trabalho.includes(dia.value)}
+                          onChange={() => toggleDia(dia.value)}
+                          className="sr-only"
+                        />
+                        <span className="text-sm font-medium text-neutral-700">
+                          {dia.label.substring(0, 3)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Horário de Início"
-                type="time"
-                value={formData.hora_inicio}
-                onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
-              />
+                {/* Horário padrão */}
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Horário de Início"
+                    type="time"
+                    value={formData.hora_inicio}
+                    onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
+                  />
 
-              <Input
-                label="Horário de Término"
-                type="time"
-                value={formData.hora_fim}
-                onChange={(e) => setFormData({ ...formData, hora_fim: e.target.value })}
-              />
-            </div>
+                  <Input
+                    label="Horário de Término"
+                    type="time"
+                    value={formData.hora_fim}
+                    onChange={(e) => setFormData({ ...formData, hora_fim: e.target.value })}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Horários personalizados por dia */}
+                <div className="space-y-3">
+                  {DIAS_SEMANA.map((dia) => {
+                    const diaAtivo = formData.dias_trabalho.includes(dia.value);
+                    const horarios = formData.horarios_por_dia[dia.value] || { inicio: '09:00', fim: '18:00' };
+                    
+                    return (
+                      <div key={dia.value} className="flex items-center gap-4 p-3 border rounded-lg">
+                        <label className="flex items-center gap-2 min-w-[120px]">
+                          <input
+                            type="checkbox"
+                            checked={diaAtivo}
+                            onChange={() => toggleDia(dia.value)}
+                            className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-sm font-medium text-neutral-700">{dia.label}</span>
+                        </label>
+                        
+                        {diaAtivo && (
+                          <div className="flex items-center gap-3 flex-1">
+                            <input
+                              type="time"
+                              value={horarios.inicio}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                horarios_por_dia: {
+                                  ...formData.horarios_por_dia,
+                                  [dia.value]: { ...horarios, inicio: e.target.value }
+                                }
+                              })}
+                              className="px-3 py-1.5 border border-neutral-300 rounded text-sm"
+                            />
+                            <span className="text-neutral-500">até</span>
+                            <input
+                              type="time"
+                              value={horarios.fim}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                horarios_por_dia: {
+                                  ...formData.horarios_por_dia,
+                                  [dia.value]: { ...horarios, fim: e.target.value }
+                                }
+                              })}
+                              className="px-3 py-1.5 border border-neutral-300 rounded text-sm"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
