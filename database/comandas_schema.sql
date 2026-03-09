@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS comandas (
   numero_comanda INTEGER NOT NULL UNIQUE,
   cliente_id BIGINT REFERENCES clientes(id),
   cliente_nome VARCHAR(255),
-  profissional_id UUID REFERENCES usuarios(id),
+  profissional_id UUID REFERENCES profissionais(id),
   status VARCHAR(20) DEFAULT 'aberta' CHECK (status IN ('aberta', 'fechada', 'cancelada')),
   data_abertura TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   data_fechamento TIMESTAMP WITH TIME ZONE,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS comanda_itens (
   quantidade DECIMAL(10,2) DEFAULT 1,
   valor_unitario DECIMAL(10,2) NOT NULL,
   valor_total DECIMAL(10,2) NOT NULL,
-  profissional_id UUID REFERENCES usuarios(id),
+  profissional_id UUID REFERENCES profissionais(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

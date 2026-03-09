@@ -320,7 +320,6 @@ export default function ServicosNewPage() {
                       <th className="text-left py-3 px-4 font-semibold text-neutral-700">Grupo</th>
                       <th className="text-right py-3 px-4 font-semibold text-neutral-700">Preço</th>
                       <th className="text-center py-3 px-4 font-semibold text-neutral-700">Duração</th>
-                      <th className="text-center py-3 px-4 font-semibold text-neutral-700">Comissão</th>
                       <th className="text-center py-3 px-4 font-semibold text-neutral-700">Status</th>
                       <th className="text-right py-3 px-4 font-semibold text-neutral-700">Ações</th>
                     </tr>
@@ -370,17 +369,6 @@ export default function ServicosNewPage() {
                             <Badge variant="default">
                               {servico.duracao_minutos} min
                             </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {servico.comissao_tipo === 'percentual' ? (
-                              <span className="text-sm text-neutral-700">
-                                {servico.comissao_profissional}%
-                              </span>
-                            ) : (
-                              <span className="text-sm text-neutral-700">
-                                R$ {parseFloat(servico.comissao_valor_fixo || 0).toFixed(2)}
-                              </span>
-                            )}
                           </td>
                           <td className="py-3 px-4 text-center">
                             <Badge variant={servico.ativo ? 'success' : 'default'}>

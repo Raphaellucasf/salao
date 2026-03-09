@@ -31,7 +31,7 @@ export default function ComandasPage() {
     try {
       let query = supabase
         .from('comandas')
-        .select('*, comanda_itens(*)')
+        .select('*, cliente:clientes(nome), comanda_itens(*)')
         .order('data_abertura', { ascending: false });
 
       if (filter === 'abertas') {
@@ -218,7 +218,7 @@ export default function ComandasPage() {
                       Comanda #{comanda.numero_comanda}
                     </h3>
                     <p className="text-sm text-neutral-600">
-                      {comanda.cliente_nome || 'Cliente não informado'}
+                      {comanda.cliente?.nome || 'Cliente não informado'}
                     </p>
                   </div>
                   {getStatusBadge(comanda.status)}

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card } from '@/components/ui';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
 
 interface Appointment {
   id: string;
@@ -12,60 +14,200 @@ interface Appointment {
   startTime: string;
   duration: number;
   status: 'confirmed' | 'pending' | 'cancelled';
+  comanda_id?: number;
+  groupColor?: string;
+  groupName?: string;
+  tem_etapas?: boolean;
+  etapas?: Array<{
+    id: string;
+    ordem: number;
+    nome_etapa: string;
+    duracao_minutos: number;
+    profissional_id?: string;
+    profissional_nome?: string;
+    profissional_cor?: string;
+    auxiliar_id?: string;
+    auxiliar_nome?: string;
+    status_etapa?: string;
+  }>;
+  // Metadados para etapas vinculadas
+  agendamento_id?: string;
+  etapa_index?: number;
+  total_etapas?: number;
+  etapa_id?: string;
+  eh_auxiliar?: boolean;
+}
+
+interface Professional {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export default function AgendaPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{time: string; professionalId: string} | null>(null);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [profissionais, setProfissionais] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Estado para o drawer de visualização da comanda
+  const [comandaDrawerOpen, setComandaDrawerOpen] = useState(false);
+  const [selectedComandaId, setSelectedComandaId] = useState<number | undefined>(undefined);
 
-  // Mock data - profissionais (memoizado para evitar re-renders)
-  const professionals = useMemo(() => [
-    { id: '1', name: 'Dimas', color: 'from-blue-500 to-blue-600' },
-    { id: '2', name: 'Julya', color: 'from-pink-500 to-pink-600' },
-    { id: '3', name: 'Hendril', color: 'from-purple-500 to-purple-600' },
-    { id: '4', name: 'Amélia', color: 'from-green-500 to-green-600' },
-  ], []);
+  // Carregar profissionais
+  useEffect(() => {
+    loadProfessionals();
+  }, []);
 
-  // Mock data - agendamentos (agora com setState)
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    {
-      id: '1',
-      professionalId: '1',
-      client: 'Maria Silva',
-      service: 'Corte Feminino',
-      startTime: '09:00',
-      duration: 60,
-      status: 'confirmed',
-    },
-    {
-      id: '2',
-      professionalId: '2',
-      client: 'Ana Santos',
-      service: 'Coloração + Corte',
-      startTime: '10:00',
-      duration: 120,
-      status: 'confirmed',
-    },
-    {
-      id: '3',
-      professionalId: '1',
-      client: 'Paula Costa',
-      service: 'Escova',
-      startTime: '14:00',
-      duration: 45,
-      status: 'pending',
-    },
-    {
-      id: '4',
-      professionalId: '3',
-      client: 'Carla Souza',
-      service: 'Progressiva',
-      startTime: '09:30',
-      duration: 180,
-      status: 'confirmed',
-    },
-  ]);
+  // Carregar agendamentos quando mudar a data
+  useEffect(() => {
+    loadAppointments();
+  }, [selectedDate]);
+
+  const loadProfessionals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profissionais')
+        .select('id, nome, cor_agenda, é_auxiliar')
+        .order('nome');
+
+      if (error) throw error;
+
+      setProfissionais(data || []);
+
+      const profs = (data || []).map((prof: any) => ({
+        id: prof.id,
+        name: prof.nome,
+        color: prof.cor_agenda || '#3B82F6',
+      }));
+
+      setProfessionals(profs);
+    } catch (error) {
+      console.error('Erro ao carregar profissionais:', error);
+    }
+  };
+
+  const loadAppointments = async () => {
+    try {
+      setLoading(true);
+      
+      const dataFormatada = selectedDate.toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('vw_agendamentos_completos')
+        .select('*')
+        .eq('data_agendamento', dataFormatada);
+
+      if (error) throw error;
+      
+      console.log('📅 Agendamentos carregados:', data?.length || 0);
+      if (data && data.length > 0) {
+        console.log('📋 Primeiro agendamento:', {
+          id: data[0].id,
+          comanda_id: data[0].comanda_id,
+          cliente: data[0].cliente_nome,
+        });
+      }
+
+      const apts: Appointment[] = [];
+
+      (data || []).forEach((ag: any) => {
+        // Converter status
+        let status: 'confirmed' | 'pending' | 'cancelled' = 'pending';
+        if (ag.status === 'concluido' || ag.status === 'confirmado') status = 'confirmed';
+        else if (ag.status === 'cancelado') status = 'cancelled';
+        else if (ag.status === 'agendado') status = 'pending';
+
+        // Extrair nomes dos serviços do JSON
+        let servicosStr = 'Serviço';
+        try {
+          const servicos = typeof ag.servicos === 'string' ? JSON.parse(ag.servicos) : ag.servicos;
+          if (Array.isArray(servicos) && servicos.length > 0) {
+            servicosStr = servicos.map((s: any) => s.nome).join(', ');
+          }
+        } catch (e) {
+          console.error('Erro ao parsear serviços:', e);
+        }
+
+        // Processar etapas
+        let etapas: any[] = [];
+        try {
+          const etapasData = typeof ag.etapas === 'string' ? JSON.parse(ag.etapas) : ag.etapas;
+          if (Array.isArray(etapasData)) {
+            etapas = etapasData;
+          }
+        } catch (e) {
+          console.error('Erro ao parsear etapas:', e);
+        }
+
+        // Se tem etapas, criar um appointment para cada etapa
+        if (ag.tem_etapas && etapas.length > 0) {
+          let horaAcumulada = ag.hora_inicio ? ag.hora_inicio.substring(0, 5) : '00:00';
+
+          etapas.forEach((etapa, etapaIndex) => {
+            // Determinar profissional responsável (auxiliar ou profissional)
+            const profissionalId = etapa.auxiliar_id || etapa.profissional_id;
+            const profissionalNome = etapa.auxiliar_nome || etapa.profissional_nome;
+            const profissionalCor = etapa.profissional_cor || ag.grupo_cor || '#6366F1';
+
+            apts.push({
+              id: `${ag.id}-etapa-${etapa.id}`,
+              professionalId: profissionalId,
+              client: ag.cliente_nome || 'Cliente',
+              service: `${etapa.ordem}. ${etapa.nome_etapa}`,
+              startTime: horaAcumulada,
+              duration: etapa.duracao_minutos,
+              status,
+              comanda_id: ag.comanda_id,
+              groupColor: profissionalCor,
+              groupName: `${servicosStr} (${etapa.ordem}/${etapas.length})`,
+              tem_etapas: true,
+              etapas: [etapa],
+              // Metadados para vincular etapas do mesmo serviço
+              agendamento_id: ag.id,
+              etapa_index: etapaIndex,
+              total_etapas: etapas.length,
+              etapa_id: etapa.id,
+              eh_auxiliar: !!etapa.auxiliar_id,
+            });
+
+            // Calcular próximo horário
+            const [hora, minuto] = horaAcumulada.split(':').map(Number);
+            const totalMinutos = hora * 60 + minuto + etapa.duracao_minutos;
+            const novaHora = Math.floor(totalMinutos / 60);
+            const novoMinuto = totalMinutos % 60;
+            horaAcumulada = `${novaHora.toString().padStart(2, '0')}:${novoMinuto.toString().padStart(2, '0')}`;
+          });
+        } else {
+          // Serviço sem etapas - renderizar normalmente
+          apts.push({
+            id: ag.id,
+            professionalId: ag.profissional_id,
+            client: ag.cliente_nome || 'Cliente',
+            service: servicosStr,
+            startTime: ag.hora_inicio ? ag.hora_inicio.substring(0, 5) : '00:00',
+            duration: ag.duracao_total || 60,
+            status,
+            comanda_id: ag.comanda_id,
+            groupColor: ag.grupo_cor || '#6366F1',
+            groupName: ag.grupo_nome,
+            tem_etapas: false,
+            etapas: [],
+          });
+        }
+      });
+
+      setAppointments(apts);
+    } catch (error) {
+      console.error('Erro ao carregar agendamentos:', error);
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Gerar horários (8:00 às 19:00 a cada 30 min) - memoizado
   const timeSlots = useMemo(() => {
@@ -149,65 +291,95 @@ export default function AgendaPage() {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, time: string, professionalId: string) => {
+  const handleDrop = useCallback(async (e: React.DragEvent, time: string, professionalId: string) => {
     e.preventDefault();
     e.stopPropagation();
     
     if (draggedAppointmentId) {
       // Busca o appointment atual pelo ID
-      setAppointments(prevAppointments => {
-        const draggedAppointment = prevAppointments.find(apt => apt.id === draggedAppointmentId);
+      const draggedAppointment = appointments.find(apt => apt.id === draggedAppointmentId);
         
-        if (draggedAppointment) {
-          // Verifica se houve mudança real
-          const hasChanged = draggedAppointment.startTime !== time || draggedAppointment.professionalId !== professionalId;
-          
-          if (hasChanged) {
-            // Feedback visual
-            const professional = professionals.find(p => p.id === professionalId);
-            const fromProfessional = professionals.find(p => p.id === draggedAppointment.professionalId);
-            
-            if (draggedAppointment.professionalId === professionalId) {
-              console.log(`✓ Agendamento de ${draggedAppointment.client} movido de ${draggedAppointment.startTime} para ${time}`);
-            } else {
-              console.log(`✓ Agendamento de ${draggedAppointment.client} transferido de ${fromProfessional?.name} (${draggedAppointment.startTime}) para ${professional?.name} (${time})`);
+      if (draggedAppointment) {
+        // Verifica se houve mudança real
+        const hasChanged = draggedAppointment.startTime !== time || draggedAppointment.professionalId !== professionalId;
+        
+        if (hasChanged) {
+          try {
+            // Se for uma etapa (tem etapa_id), atualizar apenas a etapa
+            if (draggedAppointment.tem_etapas && draggedAppointment.etapa_id) {
+              // Verificar se o profissional de destino é auxiliar
+              const profissionalDestino = profissionais.find(p => p.id === professionalId);
+              const ehAuxiliarDestino = profissionalDestino?.é_auxiliar || false;
+              
+              // Atualizar etapa específica no banco
+              const { error } = await supabase
+                .from('comanda_item_etapas')
+                .update({
+                  profissional_id: ehAuxiliarDestino ? null : professionalId,
+                  auxiliar_id: ehAuxiliarDestino ? professionalId : null,
+                  hora_inicio: time + ':00',
+                })
+                .eq('id', draggedAppointment.etapa_id);
+
+              if (error) throw error;
+
+              console.log(`✓ Etapa ${draggedAppointment.service} movida para ${profissionalDestino?.name} às ${time}`);
+            } else if (draggedAppointment.comanda_id) {
+              // Atualizar comanda inteira (serviço sem etapas)
+              const { error } = await supabase
+                .from('comandas')
+                .update({
+                  hora_inicio: time + ':00',
+                  profissional_id: professionalId,
+                })
+                .eq('id', draggedAppointment.comanda_id);
+
+              if (error) throw error;
+
+              const professional = professionals.find(p => p.id === professionalId);
+              const fromProfessional = professionals.find(p => p.id === draggedAppointment.professionalId);
+              
+              if (draggedAppointment.professionalId === professionalId) {
+                console.log(`✓ Agendamento de ${draggedAppointment.client} movido de ${draggedAppointment.startTime} para ${time}`);
+              } else {
+                console.log(`✓ Agendamento de ${draggedAppointment.client} transferido de ${fromProfessional?.name} (${draggedAppointment.startTime}) para ${professional?.name} (${time})`);
+              }
             }
             
-            // Retorna novo array com appointment atualizado
-            return prevAppointments.map(apt => 
-              apt.id === draggedAppointmentId
-                ? { ...apt, startTime: time, professionalId: professionalId }
-                : apt
-            );
+            // Recarregar agendamentos para refletir mudanças
+            await loadAppointments();
+          } catch (error) {
+            console.error('Erro ao atualizar agendamento:', error);
+            alert('Erro ao mover agendamento. Tente novamente.');
           }
         }
-        return prevAppointments;
-      });
+      }
     }
     
     setDraggedAppointmentId(null);
     setDropTarget(null);
-  }, [draggedAppointmentId, professionals]);
+  }, [draggedAppointmentId, professionals, appointments, profissionais, loadAppointments]);
 
-  const getStatusColor = useCallback((status: string) => {
+  const getStatusIndicator = useCallback((status: string) => {
+    // Retorna classes para indicador de status (pequeno círculo no topo direito)
     switch (status) {
       case 'confirmed':
-        return 'bg-green-500 border-green-600';
+        return 'bg-green-400';
       case 'pending':
-        return 'bg-yellow-500 border-yellow-600';
+        return 'bg-yellow-400';
       case 'cancelled':
-        return 'bg-red-500 border-red-600';
+        return 'bg-red-400';
       default:
-        return 'bg-neutral-500 border-neutral-600';
+        return 'bg-neutral-400';
     }
   }, []);
 
-  const todayStats = {
-    total: 12,
-    confirmed: 8,
-    pending: 3,
-    cancelled: 1,
-  };
+  const todayStats = useMemo(() => ({
+    total: appointments.length,
+    confirmed: appointments.filter(a => a.status === 'confirmed').length,
+    pending: appointments.filter(a => a.status === 'pending').length,
+    cancelled: appointments.filter(a => a.status === 'cancelled').length,
+  }), [appointments]);
 
   return (
     <div className="p-6 space-y-6">
@@ -281,18 +453,26 @@ export default function AgendaPage() {
       </div>
 
       {/* Agenda Timeline */}
-      <Card padding="none" className="overflow-hidden">
+      {loading ? (
+        <Card className="p-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-neutral-600">Carregando agendamentos...</p>
+          </div>
+        </Card>
+      ) : (
+        <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
           <div className="min-w-[1000px]">
             {/* Header com nomes dos profissionais */}
-            <div className="grid grid-cols-[80px_repeat(4,1fr)] bg-neutral-900 text-white sticky top-0 z-10">
+            <div className="grid bg-neutral-900 text-white sticky top-0 z-10" style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)` }}>
               <div className="p-4 border-r border-neutral-800 flex items-center justify-center">
                 <CalendarIcon className="w-5 h-5" />
               </div>
               {professionals.map((prof) => (
                 <div key={prof.id} className="p-4 border-r border-neutral-800 last:border-r-0">
                   <div className="flex items-center justify-center space-x-2">
-                    <div className={`w-3 h-3 rounded-full bg-gradient-to-br ${prof.color}`} />
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: prof.color }} />
                     <span className="font-semibold">{prof.name}</span>
                   </div>
                 </div>
@@ -301,7 +481,7 @@ export default function AgendaPage() {
 
             {/* Grid de horários */}
             <div className="relative bg-white">
-              <div className="grid grid-cols-[80px_repeat(4,1fr)]" style={{ gridAutoRows: '40px' }}>
+              <div className="grid" style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)`, gridAutoRows: '40px' }}>
                 {timeSlots.map((time, timeIndex) => (
                   <div key={`row-${time}`} className="contents">
                     {/* Coluna de horário */}
@@ -350,29 +530,57 @@ export default function AgendaPage() {
                                 handleDragStart(e, appointmentAtThisSlot.id);
                               }}
                               onDragEnd={handleDragEnd}
-                              className={`absolute inset-1 rounded-lg p-2 border-2 shadow-lg cursor-grab hover:shadow-xl transition-shadow z-20 will-change-transform ${getStatusColor(appointmentAtThisSlot.status)} ${
+                              className={`absolute inset-1 rounded-lg p-2 border-2 shadow-lg cursor-grab hover:shadow-xl transition-shadow z-20 will-change-transform ${
                                 draggedAppointmentId === appointmentAtThisSlot.id ? 'opacity-50' : 'opacity-100'
+                              } ${
+                                appointmentAtThisSlot.tem_etapas 
+                                  ? 'border-white border-dashed' 
+                                  : 'border-white/30'
                               }`}
                               style={{
                                 height: `calc(${rowSpan * 40}px - 8px)`,
-                                transform: 'translate3d(0, 0, 0)', // Força aceleração GPU
-                                backfaceVisibility: 'hidden', // Otimiza rendering
+                                backgroundColor: appointmentAtThisSlot.groupColor || '#6366F1',
+                                transform: 'translate3d(0, 0, 0)',
+                                backfaceVisibility: 'hidden',
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                console.log('Detalhes', appointmentAtThisSlot);
+                                console.log('📋 Clicou no agendamento:', {
+                                  id: appointmentAtThisSlot.id,
+                                  comanda_id: appointmentAtThisSlot.comanda_id,
+                                  cliente: appointmentAtThisSlot.client,
+                                });
+                                if (appointmentAtThisSlot.comanda_id) {
+                                  setSelectedComandaId(appointmentAtThisSlot.comanda_id);
+                                  setComandaDrawerOpen(true);
+                                } else {
+                                  console.warn('⚠️ Agendamento sem comanda_id');
+                                }
                               }}
-                              title={`Arraste para mover ${appointmentAtThisSlot.client} para outro horário ou profissional`}
+                              title={`${appointmentAtThisSlot.groupName || 'Serviço'} - Arraste para mover ${appointmentAtThisSlot.client} para outro horário ou profissional`}
                             >
-                              <div className="text-white select-none h-full overflow-hidden">
-                                <div className="flex items-center justify-between mb-1">
-                                  <p className="font-semibold text-sm truncate">{appointmentAtThisSlot.client}</p>
-                                  <svg className="w-4 h-4 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                  </svg>
+                              {/* Indicador de status no canto superior direito */}
+                              <div className={`absolute top-1 right-1 w-2 h-2 rounded-full ${getStatusIndicator(appointmentAtThisSlot.status)} z-30`} 
+                                   title={appointmentAtThisSlot.status === 'confirmed' ? 'Confirmado' : appointmentAtThisSlot.status === 'pending' ? 'Pendente' : 'Cancelado'} />
+                              
+                              {/* Badge de etapa se fizer parte de sequência */}
+                              {appointmentAtThisSlot.tem_etapas && appointmentAtThisSlot.etapa_index !== undefined && (
+                                <div className="absolute top-1 left-1 bg-white/90 text-neutral-900 text-[9px] font-bold px-1.5 py-0.5 rounded z-30">
+                                  {appointmentAtThisSlot.etapa_index + 1}/{appointmentAtThisSlot.total_etapas}
                                 </div>
+                              )}
+                              
+                              {/* Indicador de auxiliar */}
+                              {appointmentAtThisSlot.eh_auxiliar && (
+                                <div className="absolute top-1 left-10 text-white text-xs z-30">
+                                  🤝
+                                </div>
+                              )}
+                              
+                              <div className="text-white select-none h-full overflow-hidden flex flex-col justify-center">
+                                <p className="font-semibold text-sm truncate mb-0.5">{appointmentAtThisSlot.client}</p>
                                 <p className="text-xs opacity-90 truncate">{appointmentAtThisSlot.service}</p>
-                                <p className="text-xs opacity-75 mt-1">
+                                <p className="text-[10px] opacity-75 mt-0.5">
                                   {appointmentAtThisSlot.startTime} ({appointmentAtThisSlot.duration}min)
                                 </p>
                               </div>
@@ -388,6 +596,7 @@ export default function AgendaPage() {
           </div>
         </div>
       </Card>
+      )}
 
       {/* Legenda */}
       <div className="flex items-center justify-center space-x-6 text-sm">
@@ -404,6 +613,16 @@ export default function AgendaPage() {
           <span className="text-neutral-700">Cancelado</span>
         </div>
       </div>
+
+      {/* Drawer de visualização da comanda */}
+      <ComandaViewDrawer
+        isOpen={comandaDrawerOpen}
+        onClose={() => {
+          setComandaDrawerOpen(false);
+          setSelectedComandaId(undefined);
+        }}
+        comandaId={selectedComandaId}
+      />
     </div>
   );
 }

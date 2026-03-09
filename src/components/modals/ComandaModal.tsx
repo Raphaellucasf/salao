@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Plus, Trash2, ShoppingBag, Scissors, Package as PackageIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import AtribuirEtapasServico from './AtribuirEtapasServico';
 
 interface ComandaItem {
   id?: string;
@@ -17,6 +18,9 @@ interface ComandaItem {
   quantidade: number;
   valor_unitario: number;
   valor_total: number;
+  tem_etapas?: boolean;
+  etapas?: any[];
+  atribuicoes_etapas?: any[];
 }
 
 interface ComandaModalProps {
@@ -40,6 +44,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     cliente_id: '',
     profissional_id: '',
     auxiliar_id: '',
+    data_agendamento: '',
+    hora_inicio: '',
     observacoes: '',
   });
 
@@ -104,20 +110,72 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         cliente_id: comanda.cliente_id || '',
         profissional_id: comanda.profissional_id || '',
         auxiliar_id: comanda.auxiliar_id || '',
+        data_agendamento: comanda.data_agendamento || '',
+        hora_inicio: comanda.hora_inicio || '',
         observacoes: comanda.observacoes || '',
       });
 
-      setItens(comanda.comanda_itens || []);
+      // Load items with their etapas
+      const itemsWithEtapas = await Promise.all(
+        (comanda.comanda_itens || []).map(async (item: any) => {
+          // Check if item is a service and if it has etapas
+          if (item.tipo === 'servico' && item.item_id) {
+            const { data: servico } = await supabase
+              .from('servicos')
+              .select('tem_etapas')
+              .eq('id', item.item_id)
+              .single();
+
+            if (servico?.tem_etapas) {
+              // Load etapas definition
+              const { data: etapas } = await supabase
+                .from('servico_etapas')
+                .select('*')
+                .eq('servico_id', item.item_id)
+                .eq('ativo', true)
+                .order('ordem');
+
+              // Load etapas assignments
+              const { data: atribuicoes } = await supabase
+                .from('comanda_item_etapas')
+                .select('*')
+                .eq('comanda_item_id', item.id)
+                .order('ordem');
+
+              return {
+                ...item,
+                tem_etapas: true,
+                etapas: etapas || [],
+                atribuicoes_etapas: atribuicoes || [],
+              };
+            }
+          }
+
+          return {
+            ...item,
+            tem_etapas: false,
+            etapas: [],
+            atribuicoes_etapas: [],
+          };
+        })
+      );
+
+      setItens(itemsWithEtapas);
     } catch (err) {
       console.error('Erro ao carregar comanda:', err);
     }
   };
 
   const resetForm = () => {
+    // Auto-fill with today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().split('T')[0];
+    
     setFormData({
       cliente_id: '',
       profissional_id: '',
       auxiliar_id: '',
+      data_agendamento: today,
+      hora_inicio: '',
       observacoes: '',
     });
     setItens([]);
@@ -131,7 +189,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     setError('');
   };
 
-  const handleItemSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleItemSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
     if (!value) return;
 
@@ -147,17 +205,35 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           descricao: item.nome,
           valor_unitario: item.preco || 0,
           valor_total: (item.preco || 0) * novoItem.quantidade,
+          tem_etapas: false,
+          etapas: [],
+          atribuicoes_etapas: [],
         });
       }
     } else if (tipo === 'servico') {
       item = servicos.find(s => s.id === value);
       if (item) {
+        // Verificar se o serviço tem etapas
+        let etapas: any[] = [];
+        if (item.tem_etapas) {
+          const { data } = await supabase
+            .from('servico_etapas')
+            .select('*')
+            .eq('servico_id', item.id)
+            .eq('ativo', true)
+            .order('ordem');
+          etapas = data || [];
+        }
+
         setNovoItem({
           ...novoItem,
           item_id: item.id,
           descricao: item.nome,
           valor_unitario: item.preco || 0,
           valor_total: (item.preco || 0) * novoItem.quantidade,
+          tem_etapas: item.tem_etapas || false,
+          etapas: etapas,
+          atribuicoes_etapas: [],
         });
       }
     } else if (tipo === 'pacote') {
@@ -169,6 +245,9 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           descricao: item.nome,
           valor_unitario: item.preco || 0,
           valor_total: (item.preco || 0) * novoItem.quantidade,
+          tem_etapas: false,
+          etapas: [],
+          atribuicoes_etapas: [],
         });
       }
     }
@@ -188,6 +267,17 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       return;
     }
 
+    // Se tem etapas, validar que todas estão atribuídas
+    if (novoItem.tem_etapas && novoItem.etapas && novoItem.etapas.length > 0) {
+      const todasAtribuidas = novoItem.atribuicoes_etapas?.every(
+        a => a.profissional_id || a.auxiliar_id
+      );
+      if (!todasAtribuidas) {
+        setError('Atribua profissionais/auxiliares a todas as etapas do serviço');
+        return;
+      }
+    }
+
     setItens([...itens, { ...novoItem, id: crypto.randomUUID() }]);
     setNovoItem({
       tipo: 'servico',
@@ -195,6 +285,9 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       quantidade: 1,
       valor_unitario: 0,
       valor_total: 0,
+      tem_etapas: false,
+      etapas: [],
+      atribuicoes_etapas: [],
     });
     setError('');
   };
@@ -231,6 +324,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             cliente_nome: cliente?.nome || null,
             profissional_id: formData.profissional_id || null,
             auxiliar_id: formData.auxiliar_id || null,
+            data_agendamento: formData.data_agendamento || null,
+            hora_inicio: formData.hora_inicio || null,
             total,
             observacoes: formData.observacoes,
           })
@@ -238,22 +333,51 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
         if (updateError) throw updateError;
 
-        // Deletar itens antigos
+        // Deletar itens antigos e suas etapas
         await supabase.from('comanda_itens').delete().eq('comanda_id', comandaId);
 
-        // Inserir novos itens
-        const { error: itensError } = await supabase
+        // Inserir novos itens e capturar IDs
+        const { data: itensInseridos, error: itensError } = await supabase
           .from('comanda_itens')
           .insert(itens.map(item => {
-            const { id, ...itemData } = item; // Remove o id temporário
+            const { id, tem_etapas, etapas, atribuicoes_etapas, ...itemData } = item;
             return {
               comanda_id: comandaId,
               ...itemData,
-              item_id: itemData.item_id ? String(itemData.item_id) : null, // Converte para string
+              item_id: itemData.item_id ? String(itemData.item_id) : null,
             };
-          }));
+          }))
+          .select();
 
         if (itensError) throw itensError;
+
+        // Inserir atribuições de etapas
+        const etapasParaInserir: any[] = [];
+        itens.forEach((item, index) => {
+          if (item.tem_etapas && item.atribuicoes_etapas && item.atribuicoes_etapas.length > 0) {
+            const comandaItemId = itensInseridos?.[index]?.id;
+            if (comandaItemId) {
+              item.atribuicoes_etapas.forEach((atrib: any) => {
+                etapasParaInserir.push({
+                  comanda_item_id: comandaItemId,
+                  servico_etapa_id: atrib.servico_etapa_id,
+                  ordem: atrib.ordem,
+                  nome: atrib.nome,
+                  duracao_minutos: atrib.duracao_minutos,
+                  profissional_id: atrib.profissional_id || null,
+                  auxiliar_id: atrib.auxiliar_id || null,
+                });
+              });
+            }
+          }
+        });
+
+        if (etapasParaInserir.length > 0) {
+          const { error: etapasError } = await supabase
+            .from('comanda_item_etapas')
+            .insert(etapasParaInserir);
+          if (etapasError) throw etapasError;
+        }
       } else {
         // Criar nova comanda
         const { data: novaComanda, error: insertError } = await supabase
@@ -264,6 +388,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             cliente_nome: cliente?.nome || null,
             profissional_id: formData.profissional_id || null,
             auxiliar_id: formData.auxiliar_id || null,
+            data_agendamento: formData.data_agendamento || null,
+            hora_inicio: formData.hora_inicio || null,
             status: 'aberta',
             total,
             observacoes: formData.observacoes,
@@ -273,19 +399,48 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
         if (insertError) throw insertError;
 
-        // Inserir itens
-        const { error: itensError } = await supabase
+        // Inserir itens e capturar IDs
+        const { data: itensInseridos, error: itensError } = await supabase
           .from('comanda_itens')
           .insert(itens.map(item => {
-            const { id, ...itemData } = item; // Remove o id temporário
+            const { id, tem_etapas, etapas, atribuicoes_etapas, ...itemData } = item;
             return {
               comanda_id: novaComanda.id,
               ...itemData,
-              item_id: itemData.item_id ? String(itemData.item_id) : null, // Converte para string
+              item_id: itemData.item_id ? String(itemData.item_id) : null,
             };
-          }));
+          }))
+          .select();
 
         if (itensError) throw itensError;
+
+        // Inserir atribuições de etapas
+        const etapasParaInserir: any[] = [];
+        itens.forEach((item, index) => {
+          if (item.tem_etapas && item.atribuicoes_etapas && item.atribuicoes_etapas.length > 0) {
+            const comandaItemId = itensInseridos?.[index]?.id;
+            if (comandaItemId) {
+              item.atribuicoes_etapas.forEach((atrib: any) => {
+                etapasParaInserir.push({
+                  comanda_item_id: comandaItemId,
+                  servico_etapa_id: atrib.servico_etapa_id,
+                  ordem: atrib.ordem,
+                  nome: atrib.nome,
+                  duracao_minutos: atrib.duracao_minutos,
+                  profissional_id: atrib.profissional_id || null,
+                  auxiliar_id: atrib.auxiliar_id || null,
+                });
+              });
+            }
+          }
+        });
+
+        if (etapasParaInserir.length > 0) {
+          const { error: etapasError } = await supabase
+            .from('comanda_item_etapas')
+            .insert(etapasParaInserir);
+          if (etapasError) throw etapasError;
+        }
       }
 
       onSave();
@@ -378,6 +533,33 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           </div>
         </div>
 
+        {/* Data e Hora do Agendamento */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">
+              Data do Agendamento
+            </label>
+            <input
+              type="date"
+              value={formData.data_agendamento}
+              onChange={(e) => setFormData({ ...formData, data_agendamento: e.target.value })}
+              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">
+              Hora de Início
+            </label>
+            <input
+              type="time"
+              value={formData.hora_inicio}
+              onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
+              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
         {/* Adicionar Item */}
         <div className="border-t pt-4">
           <h3 className="font-semibold text-neutral-900 mb-4">Adicionar Item</h3>
@@ -441,6 +623,21 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               </Button>
             </div>
           </div>
+
+          {/* Atribuir Etapas (se o serviço tiver etapas) */}
+          {novoItem.tem_etapas && novoItem.etapas && novoItem.etapas.length > 0 && (
+            <div className="mt-4">
+              <AtribuirEtapasServico
+                etapas={novoItem.etapas}
+                profissionais={profissionais}
+                auxiliares={auxiliares}
+                profissionalPrincipalId={formData.profissional_id}
+                onChange={(atribuicoes) => {
+                  setNovoItem({ ...novoItem, atribuicoes_etapas: atribuicoes });
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Lista de Itens */}
@@ -449,33 +646,68 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             <h3 className="font-semibold text-neutral-900 mb-3">Itens da Comanda</h3>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {itens.map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Badge variant={item.tipo === 'servico' ? 'default' : item.tipo === 'produto' ? 'success' : 'warning'}>
-                      <div className="flex items-center gap-1">
-                        {getItemIcon(item.tipo)}
-                        <span className="text-xs">{item.tipo}</span>
+                <div key={index} className="bg-neutral-50 rounded-lg">
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex items-center gap-3 flex-1">
+                      <Badge variant={item.tipo === 'servico' ? 'default' : item.tipo === 'produto' ? 'success' : 'warning'}>
+                        <div className="flex items-center gap-1">
+                          {getItemIcon(item.tipo)}
+                          <span className="text-xs">{item.tipo}</span>
+                        </div>
+                      </Badge>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{item.descricao}</p>
+                        <p className="text-xs text-neutral-600">
+                          {item.quantidade}x R$ {item.valor_unitario.toFixed(2)}
+                        </p>
+                        {item.tem_etapas && item.atribuicoes_etapas && item.atribuicoes_etapas.length > 0 && (
+                          <p className="text-xs text-blue-600 font-medium mt-1">
+                            ⚙️ {item.atribuicoes_etapas.length} etapas atribuídas
+                          </p>
+                        )}
                       </div>
-                    </Badge>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{item.descricao}</p>
-                      <p className="text-xs text-neutral-600">
-                        {item.quantidade}x R$ {item.valor_unitario.toFixed(2)}
-                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-neutral-900">
+                        R$ {item.valor_total.toFixed(2)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removerItem(index)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold text-neutral-900">
-                      R$ {item.valor_total.toFixed(2)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removerItem(index)}
-                      className="p-1 text-red-600 hover:bg-red-50 rounded"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  
+                  {/* Mostrar detalhes das etapas */}
+                  {item.tem_etapas && item.atribuicoes_etapas && item.atribuicoes_etapas.length > 0 && (
+                    <div className="px-3 pb-3 pt-1 border-t border-neutral-200 mt-2">
+                      <div className="grid grid-cols-1 gap-1">
+                        {item.atribuicoes_etapas.map((etapa: any, etapaIndex: number) => {
+                          const prof = profissionais.find(p => p.id === etapa.profissional_id);
+                          const aux = auxiliares.find(a => a.id === etapa.auxiliar_id);
+                          const responsavel = prof || aux;
+                          
+                          return (
+                            <div key={etapaIndex} className="flex items-center gap-2 text-xs">
+                              <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold">
+                                {etapa.ordem}
+                              </span>
+                              <span className="text-neutral-700">{etapa.nome}</span>
+                              <span className="text-neutral-500">•</span>
+                              <span className="text-neutral-600">{etapa.duracao_minutos}min</span>
+                              <span className="text-neutral-500">•</span>
+                              <span className="text-blue-600 font-medium">
+                                {aux ? '🤝' : '👤'} {responsavel?.nome || 'Sem atribuição'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

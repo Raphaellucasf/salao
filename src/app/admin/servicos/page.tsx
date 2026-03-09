@@ -9,7 +9,7 @@ import { ServicoModal } from '@/components/modals/ServicoModal';
 import { supabase } from '@/lib/supabase';
 import { 
   Scissors, Plus, Edit, Trash2, Clock, DollarSign, 
-  TrendingUp, Search, Eye, EyeOff, Filter 
+  Search, Eye, EyeOff, Filter 
 } from 'lucide-react';
 
 interface Servico {
@@ -337,13 +337,6 @@ export default function ServicosPage() {
                           <div className="flex items-center gap-1 text-green-600 font-medium">
                             <DollarSign className="w-4 h-4" />
                             <span>R$ {servico.preco.toFixed(2)}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-blue-600">
-                            <TrendingUp className="w-4 h-4" />
-                            <span>{servico.comissao}% comissão</span>
-                          </div>
-                          <div className="text-gray-500">
-                            Comissão: R$ {(servico.preco * servico.comissao / 100).toFixed(2)}
                           </div>
                         </div>
 

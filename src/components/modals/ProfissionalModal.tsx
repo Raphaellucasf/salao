@@ -210,6 +210,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
         hora_inicio: formData.hora_inicio,
         hora_fim: formData.hora_fim,
         ativo: formData.ativo,
+        é_auxiliar: formData.é_auxiliar,
         observacoes: formData.observacoes || null,
       };
 
