@@ -105,10 +105,11 @@ export default function AgendaPage() {
       
       console.log('📅 Agendamentos carregados:', data?.length || 0);
       if (data && data.length > 0) {
+        const first = data[0] as any;
         console.log('📋 Primeiro agendamento:', {
-          id: data[0].id,
-          comanda_id: data[0].comanda_id,
-          cliente: data[0].cliente_nome,
+          id: first.id,
+          comanda_id: first.comanda_id,
+          cliente: first.cliente_nome,
         });
       }
 
@@ -312,13 +313,13 @@ export default function AgendaPage() {
               const ehAuxiliarDestino = profissionalDestino?.é_auxiliar || false;
               
               // Atualizar etapa específica no banco
-              const { error } = await supabase
+              const { error } = await (supabase as any)
                 .from('comanda_item_etapas')
                 .update({
                   profissional_id: ehAuxiliarDestino ? null : professionalId,
                   auxiliar_id: ehAuxiliarDestino ? professionalId : null,
                   hora_inicio: time + ':00',
-                })
+                } as any)
                 .eq('id', draggedAppointment.etapa_id);
 
               if (error) throw error;
@@ -326,12 +327,12 @@ export default function AgendaPage() {
               console.log(`✓ Etapa ${draggedAppointment.service} movida para ${profissionalDestino?.name} às ${time}`);
             } else if (draggedAppointment.comanda_id) {
               // Atualizar comanda inteira (serviço sem etapas)
-              const { error } = await supabase
+              const { error } = await (supabase as any)
                 .from('comandas')
                 .update({
                   hora_inicio: time + ':00',
                   profissional_id: professionalId,
-                })
+                } as any)
                 .eq('id', draggedAppointment.comanda_id);
 
               if (error) throw error;
