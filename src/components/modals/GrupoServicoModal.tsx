@@ -61,7 +61,7 @@ export default function GrupoServicoModal({ isOpen, onClose, grupo, onSave }: Gr
       setLoadingServicos(true);
       const { data, error } = await supabase
         .from('servicos')
-        .select('id, codigo, nome, preco, duracao_minutos, categoria, ativo')
+        .select('id, codigo, nome, preco, duracao_minutos, categoria, ativo, grupo_id, descricao, observacoes, tem_etapas')
         .eq('grupo_id', grupoId)
         .order('nome');
       

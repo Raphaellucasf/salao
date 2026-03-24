@@ -18,18 +18,15 @@ export async function GET(request: NextRequest) {
     const lowStock = searchParams.get('low_stock'); // 'true' para alertas
 
     let query = supabase
-      .from('products')
+      .from('produtos')
       .select('*')
-      .eq('is_active', true)
-      .order('name', { ascending: true });
+      .eq('ativo', true)
+      .order('nome', { ascending: true });
 
-    if (unitId) query = query.eq('unit_id', unitId);
-    if (isRetail) query = query.eq('is_retail', isRetail === 'true');
-    if (category) query = query.eq('category', category);
-    if (search) query = query.ilike('name', `%${search}%`);
-    if (lowStock === 'true') {
-      query = query.lte('quantity', supabase.rpc('min_quantity'));
-    }
+    if (isRetail) query = query.eq('tipo', isRetail === 'true' ? 'revenda' : 'uso_interno');
+    if (category) query = query.eq('categoria', category);
+    if (search) query = query.ilike('nome', `%${search}%`);
+    if (lowStock === 'true') query = query.filter('quantidade', 'lte', 'quantidade_minima');
 
     const { data, error } = await query;
 
@@ -61,7 +58,7 @@ export async function POST(request: NextRequest) {
     // =====================================================
     // 1. VALIDAÇÕES
     // =====================================================
-    if (!sale_type || !unit_id || !professional_id || !products || products.length === 0) {
+    if (!sale_type || !professional_id || !products || products.length === 0) {
       return NextResponse.json(
         { error: 'Dados incompletos' },
         { status: 400 }
@@ -94,7 +91,7 @@ export async function POST(request: NextRequest) {
 
       // Buscar produto
       const { data: product, error: productError } = await supabase
-        .from('products')
+        .from('produtos')
         .select('*')
         .eq('id', product_id)
         .single();
@@ -107,19 +104,19 @@ export async function POST(request: NextRequest) {
       }
 
       // Validar tipo de venda vs tipo de produto
-      if (sale_type === 'retail_sale' && !product.is_retail) {
+      if (sale_type === 'retail_sale' && product.tipo !== 'revenda') {
         return NextResponse.json(
-          { error: `${product.name} não é produto de venda (é uso interno)` },
+          { error: `${product.nome} não é produto de venda (é uso interno)` },
           { status: 400 }
         );
       }
 
       // Verificar estoque
-      if (product.quantity < quantity) {
+      if (product.quantidade < quantity) {
         return NextResponse.json(
           {
-            error: `Estoque insuficiente para ${product.name}`,
-            available: product.quantity,
+            error: `Estoque insuficiente para ${product.nome}`,
+            available: product.quantidade,
             requested: quantity
           },
           { status: 409 }
@@ -128,10 +125,10 @@ export async function POST(request: NextRequest) {
 
       // Calcular valor (apenas para venda retail)
       if (sale_type === 'retail_sale') {
-        const price = item.price || product.sale_price;
+        const price = item.price || product.preco_venda;
         if (!price) {
           return NextResponse.json(
-            { error: `Preço não definido para ${product.name}` },
+            { error: `Preço não definido para ${product.nome}` },
             { status: 400 }
           );
         }
@@ -140,24 +137,12 @@ export async function POST(request: NextRequest) {
 
       productDetails.push({
         product_id,
-        name: product.name,
+        name: product.nome,
         quantity,
-        price: sale_type === 'retail_sale' ? (item.price || product.sale_price) : null
+        price: sale_type === 'retail_sale' ? (item.price || product.preco_venda) : null
       });
 
-      // Preparar log de estoque
-      inventoryLogs.push({
-        product_id,
-        unit_id,
-        professional_id,
-        appointment_id: appointment_id || null,
-        movement_type: sale_type === 'retail_sale' ? 'sale' : 'internal_use',
-        quantity: -quantity, // Negativo = saída
-        reason: sale_type === 'retail_sale' 
-          ? 'Venda direta ao cliente'
-          : `Uso interno${appointment_id ? ' (serviço)' : ''}`,
-        notes
-      });
+      // Sem logs de movimentação (tabela removida)
     }
 
     // =====================================================
@@ -184,16 +169,12 @@ export async function POST(request: NextRequest) {
       }
 
       const { data: transaction, error: transactionError } = await supabase
-        .from('transactions')
+        .from('transacoes')
         .insert({
-          unit_id,
-          professional_id,
-          type: 'product_sale',
-          amount: totalAmount,
-          description: `Venda de produtos: ${productDetails.map(p => p.name).join(', ')}`,
-          payment_method: payment_method || 'cash',
-          installments: installmentCount,
-          installment_value: totalAmount / installmentCount
+          tipo: 'receita',
+          valor: totalAmount,
+          descricao: `Venda de produtos: ${productDetails.map(p => p.name).join(', ')}`,
+          metodo: payment_method || 'dinheiro'
         })
         .select()
         .single();
@@ -212,27 +193,17 @@ export async function POST(request: NextRequest) {
     // 4. ATUALIZAR ESTOQUE E CRIAR LOGS
     // =====================================================
     for (const item of products) {
-      // Atualizar quantidade do produto
-      await supabase.rpc('decrement_product_quantity', {
-        product_id: item.product_id,
-        quantity_to_remove: item.quantity
-      });
-
-      // Nota: Se sua versão do Supabase não tem RPC, use UPDATE:
-      // await supabase
-      //   .from('products')
-      //   .update({ quantity: supabase.sql`quantity - ${item.quantity}` })
-      //   .eq('id', item.product_id);
-    }
-
-    // Inserir logs de movimentação
-    const { error: logsError } = await supabase
-      .from('inventory_logs')
-      .insert(inventoryLogs);
-
-    if (logsError) {
-      console.error('Erro ao criar logs de estoque:', logsError);
-      // Não retorna erro para não bloquear a venda
+      const { data: prodAtual } = await supabase
+        .from('produtos')
+        .select('quantidade')
+        .eq('id', item.product_id)
+        .single();
+      if (prodAtual) {
+        await supabase
+          .from('produtos')
+          .update({ quantidade: prodAtual.quantidade - item.quantity })
+          .eq('id', item.product_id);
+      }
     }
 
     // =====================================================
@@ -241,16 +212,16 @@ export async function POST(request: NextRequest) {
     const lowStockAlerts = [];
     for (const item of products) {
       const { data: updatedProduct } = await supabase
-        .from('products')
-        .select('name, quantity, min_quantity')
+        .from('produtos')
+        .select('nome, quantidade, quantidade_minima')
         .eq('id', item.product_id)
         .single();
 
-      if (updatedProduct && updatedProduct.quantity <= updatedProduct.min_quantity) {
+      if (updatedProduct && updatedProduct.quantidade <= (updatedProduct.quantidade_minima || 0)) {
         lowStockAlerts.push({
-          product: updatedProduct.name,
-          quantity: updatedProduct.quantity,
-          min_quantity: updatedProduct.min_quantity
+          product: updatedProduct.nome,
+          quantity: updatedProduct.quantidade,
+          min_quantity: updatedProduct.quantidade_minima
         });
       }
     }

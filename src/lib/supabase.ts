@@ -1,28 +1,26 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient as createSSRBrowserClient } from '@supabase/ssr';
 import type { Database } from '@/types/supabase';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
 // Singleton instance para browser
-let browserClient: ReturnType<typeof createClient<Database>> | null = null;
+let browserClient: ReturnType<typeof createSSRBrowserClient<Database>> | null = null;
 
-// Client-side Supabase client (singleton)
+// Client-side Supabase client usando @supabase/ssr para armazenar tokens em cookies
+// (necessário para que o middleware server-side consiga ler a sessão)
 export function createBrowserClient() {
   if (typeof window === 'undefined') {
-    // Server-side: cria nova instância
-    return createClient<Database>(supabaseUrl, supabaseAnonKey);
+    // Server-side: cria nova instância (sem singleton)
+    return createSSRBrowserClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
   }
 
-  // Browser-side: reutiliza instância existente
+  // Browser-side: reutiliza instância existente (singleton)
   if (!browserClient) {
-    browserClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        storageKey: 'otimiza-beauty-auth',
-        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-      },
-    });
+    browserClient = createSSRBrowserClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
   }
 
   return browserClient;

@@ -25,15 +25,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('transactions')
+      .from('transacoes')
       .insert({
-        unit_id,
-        appointment_id,
-        professional_id,
-        type,
-        amount,
-        description,
-        payment_method
+        tipo: type,
+        valor: amount,
+        descricao: description,
+        metodo: payment_method,
       })
       .select()
       .single();
@@ -58,24 +55,20 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('end_date');
 
     let query = supabase
-      .from('transactions')
+      .from('transacoes')
       .select('*')
-      .order('transaction_date', { ascending: false });
-
-    if (unitId) {
-      query = query.eq('unit_id', unitId);
-    }
+      .order('data', { ascending: false });
 
     if (type) {
-      query = query.eq('type', type);
+      query = query.eq('tipo', type);
     }
 
     if (startDate) {
-      query = query.gte('transaction_date', startDate);
+      query = query.gte('data', startDate);
     }
 
     if (endDate) {
-      query = query.lte('transaction_date', endDate);
+      query = query.lte('data', endDate);
     }
 
     const { data, error } = await query;

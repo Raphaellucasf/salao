@@ -59,7 +59,7 @@ export default function ProdutosPage() {
         { data: fornecedoresData },
         { data: alertasData },
       ] = await Promise.all([
-        supabase.from('produtos').select('*, grupos_produtos(nome, cor), fornecedores(nome)').order('nome'),
+        supabase.from('produtos').select('*, grupos_produtos(nome, cor), fornecedores(nome)').eq('tipo', 'revenda').order('nome'),
         supabase.from('grupos_produtos').select('*').order('nome'),
         supabase.from('fornecedores').select('*').order('nome'),
         supabase.from('estoque_alertas').select('*, produtos(nome)').eq('resolvido', false).order('created_at', { ascending: false }),
@@ -159,7 +159,7 @@ export default function ProdutosPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-neutral-900">Produtos & Estoque</h1>
+            <h1 className="text-3xl font-bold text-neutral-900">Produtos para Venda</h1>
             <p className="text-neutral-600 mt-1">Gerencie produtos, grupos e fornecedores</p>
           </div>
           

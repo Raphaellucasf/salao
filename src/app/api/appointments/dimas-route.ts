@@ -18,34 +18,21 @@ export async function GET(request: NextRequest) {
     const clientId = searchParams.get('client_id');
 
     let query = supabase
-      .from('appointments')
+      .from('agendamentos')
       .select(`
         *,
-        professional:professionals(
-          id,
-          user:users(full_name, avatar_url)
-        ),
-        secondary_professional:professionals!secondary_professional_id(
-          id,
-          user:users(full_name, avatar_url)
-        ),
-        service:services(
-          id, name, duration_minutes, price, category, requires_double_booking
-        ),
-        client:users(
-          id, full_name, phone, is_vip
-        )
+        profissional:profissionais(id, nome),
+        cliente:clientes(id, nome, telefone)
       `)
-      .order('appointment_date', { ascending: true })
-      .order('start_time', { ascending: true });
+      .order('data_agendamento', { ascending: true })
+      .order('hora_inicio', { ascending: true });
 
-    if (unitId) query = query.eq('unit_id', unitId);
     if (professionalId) {
-      query = query.or(`professional_id.eq.${professionalId},secondary_professional_id.eq.${professionalId}`);
+      query = query.eq('profissional_id', professionalId);
     }
     if (status) query = query.eq('status', status);
-    if (date) query = query.eq('appointment_date', date);
-    if (clientId) query = query.eq('client_id', clientId);
+    if (date) query = query.eq('data_agendamento', date);
+    if (clientId) query = query.eq('cliente_id', clientId);
 
     const { data, error } = await query;
 
@@ -53,18 +40,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ appointments: data });
+    return NextResponse.json({ agendamentos: data });
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// POST - Cria novo agendamento (com suporte a bloqueio duplo)
+// POST - Cria novo agendamento
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      unit_id,
       professional_id,
       service_id,
       appointment_date,
@@ -76,222 +62,64 @@ export async function POST(request: NextRequest) {
       internal_notes
     } = body;
 
-    // =====================================================
-    // 1. VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS
-    // =====================================================
-    if (!unit_id || !professional_id || !service_id || !appointment_date || !start_time || !client_name || !client_phone) {
-      return NextResponse.json(
-        { error: 'Campos obrigatórios faltando' },
-        { status: 400 }
-      );
+    // Validação
+    if (!professional_id || !appointment_date || !start_time || !client_name || !client_phone) {
+      return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 });
     }
 
-    // =====================================================
-    // 2. BUSCAR INFORMAÇÕES DO SERVIÇO
-    // =====================================================
-    const { data: service, error: serviceError } = await supabase
-      .from('services')
-      .select('duration_minutes, requires_double_booking, required_professionals, is_vip_only, name')
-      .eq('id', service_id)
-      .single();
-
-    if (serviceError || !service) {
-      return NextResponse.json({ error: 'Serviço não encontrado' }, { status: 404 });
-    }
-
-    // =====================================================
-    // 3. VERIFICAR SE É CLIENTE VIP (se serviço exige)
-    // =====================================================
-    if (service.is_vip_only) {
-      if (!client_id) {
-        return NextResponse.json(
-          { error: 'Este serviço é exclusivo para clientes VIP cadastrados' },
-          { status: 403 }
-        );
-      }
-
-      const { data: clientData } = await supabase
-        .from('users')
-        .select('is_vip')
-        .eq('id', client_id)
+    // Buscar duração do serviço
+    let duracao_minutos = 60;
+    if (service_id) {
+      const { data: service } = await supabase
+        .from('servicos')
+        .select('duracao_minutos, nome')
+        .eq('id', service_id)
         .single();
-
-      if (!clientData?.is_vip) {
-        return NextResponse.json(
-          { error: 'Este serviço é exclusivo para clientes VIP' },
-          { status: 403 }
-        );
-      }
+      if (service) duracao_minutos = service.duracao_minutos || 60;
     }
 
-    // =====================================================
-    // 4. CALCULAR END_TIME
-    // =====================================================
+    // Calcular hora_fim
     const [hours, minutes] = start_time.split(':').map(Number);
     const startMinutes = hours * 60 + minutes;
-    const endMinutes = startMinutes + service.duration_minutes;
-    const endHours = Math.floor(endMinutes / 60);
-    const endMins = endMinutes % 60;
-    const end_time = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
+    const endMinutes = startMinutes + duracao_minutos;
+    const end_time = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
 
-    // =====================================================
-    // 5. BLOQUEIO DUPLO (MEGAHAIR)
-    // =====================================================
-    let secondary_professional_id = null;
-    let is_double_booking = false;
+    // Verificar conflito
+    const { data: conflicts } = await supabase
+      .from('agendamentos')
+      .select('id')
+      .eq('profissional_id', professional_id)
+      .eq('data_agendamento', appointment_date)
+      .or(`and(hora_inicio.lte.${start_time},hora_fim.gt.${start_time}),and(hora_inicio.lt.${end_time},hora_fim.gte.${end_time})`)
+      .neq('status', 'cancelado');
 
-    if (service.requires_double_booking && service.required_professionals) {
-      is_double_booking = true;
-      const requiredProfs = service.required_professionals as string[];
-
-      // Encontrar o segundo profissional (que não é o principal)
-      secondary_professional_id = requiredProfs.find(id => id !== professional_id);
-
-      if (!secondary_professional_id) {
-        return NextResponse.json(
-          { 
-            error: `Este serviço (${service.name}) requer dois profissionais específicos. Verifique a configuração.`,
-            service_name: service.name,
-            required_professionals: requiredProfs
-          },
-          { status: 400 }
-        );
-      }
-
-      // =====================================================
-      // 6. VERIFICAR DISPONIBILIDADE DE AMBOS OS PROFISSIONAIS
-      // =====================================================
-      const professionalsToCheck = [professional_id, secondary_professional_id];
-
-      for (const profId of professionalsToCheck) {
-        // Verificar conflitos de agendamento
-        const { data: conflicts } = await supabase
-          .from('appointments')
-          .select('id, client_name, start_time, end_time')
-          .eq('appointment_date', appointment_date)
-          .or(`professional_id.eq.${profId},secondary_professional_id.eq.${profId}`)
-          .or(`and(start_time.lte.${start_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${end_time}),and(start_time.gte.${start_time},end_time.lte.${end_time})`)
-          .neq('status', 'cancelled');
-
-        if (conflicts && conflicts.length > 0) {
-          // Buscar nome do profissional
-          const { data: prof } = await supabase
-            .from('professionals')
-            .select('user:users(full_name)')
-            .eq('id', profId)
-            .single();
-
-          return NextResponse.json(
-            {
-              error: `Horário indisponível para ${prof?.user?.full_name || 'profissional'}`,
-              conflicting_appointment: conflicts[0],
-              professional_id: profId
-            },
-            { status: 409 }
-          );
-        }
-
-        // Verificar bloqueios de horário
-        const { data: blocked } = await supabase
-          .from('blocked_times')
-          .select('id, reason')
-          .eq('professional_id', profId)
-          .gte('end_datetime', `${appointment_date}T${start_time}`)
-          .lte('start_datetime', `${appointment_date}T${end_time}`);
-
-        if (blocked && blocked.length > 0) {
-          const { data: prof } = await supabase
-            .from('professionals')
-            .select('user:users(full_name)')
-            .eq('id', profId)
-            .single();
-
-          return NextResponse.json(
-            {
-              error: `Horário bloqueado para ${prof?.user?.full_name || 'profissional'}`,
-              reason: blocked[0].reason
-            },
-            { status: 409 }
-          );
-        }
-      }
-    } else {
-      // =====================================================
-      // 7. VERIFICAÇÃO PADRÃO (UM PROFISSIONAL)
-      // =====================================================
-      const { data: conflicts } = await supabase
-        .from('appointments')
-        .select('id, client_name, start_time, end_time')
-        .eq('professional_id', professional_id)
-        .eq('appointment_date', appointment_date)
-        .or(`and(start_time.lte.${start_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${end_time}),and(start_time.gte.${start_time},end_time.lte.${end_time})`)
-        .neq('status', 'cancelled');
-
-      if (conflicts && conflicts.length > 0) {
-        return NextResponse.json(
-          {
-            error: 'Horário indisponível',
-            conflicting_appointment: conflicts[0]
-          },
-          { status: 409 }
-        );
-      }
-
-      // Verificar bloqueios
-      const { data: blocked } = await supabase
-        .from('blocked_times')
-        .select('id, reason')
-        .eq('professional_id', professional_id)
-        .gte('end_datetime', `${appointment_date}T${start_time}`)
-        .lte('start_datetime', `${appointment_date}T${end_time}`);
-
-      if (blocked && blocked.length > 0) {
-        return NextResponse.json(
-          {
-            error: 'Horário bloqueado',
-            reason: blocked[0].reason
-          },
-          { status: 409 }
-        );
-      }
+    if (conflicts && conflicts.length > 0) {
+      return NextResponse.json({ error: 'Horário indisponível' }, { status: 409 });
     }
 
-    // =====================================================
-    // 8. CRIAR O AGENDAMENTO
-    // =====================================================
-    const { data: appointment, error: appointmentError } = await supabase
-      .from('appointments')
+    // Criar agendamento
+    const { data: agendamento, error: agendamentoError } = await supabase
+      .from('agendamentos')
       .insert({
-        unit_id,
-        professional_id,
-        secondary_professional_id,
-        is_double_booking,
-        service_id,
-        client_id,
-        appointment_date,
-        start_time,
-        end_time,
-        client_name,
-        client_phone,
-        notes,
-        internal_notes,
-        status: 'pending'
+        profissional_id: professional_id,
+        cliente_id: client_id || null,
+        data_agendamento: appointment_date,
+        hora_inicio: start_time,
+        hora_fim: end_time,
+        cliente_nome: client_name,
+        cliente_telefone: client_phone,
+        observacoes: notes,
+        observacoes_internas: internal_notes,
+        status: 'agendado'
       })
-      .select(`
-        *,
-        professional:professionals(user:users(full_name)),
-        secondary_professional:professionals!secondary_professional_id(user:users(full_name)),
-        service:services(name, price, category)
-      `)
+      .select(`*, profissional:profissionais(nome)`)
       .single();
 
-    if (appointmentError) {
-      return NextResponse.json({ error: appointmentError.message }, { status: 500 });
+    if (agendamentoError) {
+      return NextResponse.json({ error: agendamentoError.message }, { status: 500 });
     }
 
-    // =====================================================
-    // 9. DISPARAR WEBHOOK (n8n)
-    // =====================================================
+    // Disparar webhook (n8n)
     if (process.env.N8N_WEBHOOK_URL) {
       await fetch(process.env.N8N_WEBHOOK_URL, {
         method: 'POST',
@@ -299,35 +127,24 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           type: 'appointment.created',
           data: {
-            appointment_id: appointment.id,
+            appointment_id: agendamento.id,
             client_name,
             client_phone,
             appointment_date,
             start_time,
-            service_name: service.name,
-            professional: appointment.professional?.user?.full_name,
-            secondary_professional: appointment.secondary_professional?.user?.full_name,
-            is_double_booking
+            professional: (agendamento as any).profissional?.nome
           }
         })
       }).catch(err => console.error('Webhook error:', err));
     }
 
     return NextResponse.json(
-      {
-        appointment,
-        message: is_double_booking 
-          ? `Agendamento criado com bloqueio duplo para ${appointment.professional?.user?.full_name} e ${appointment.secondary_professional?.user?.full_name}`
-          : 'Agendamento criado com sucesso'
-      },
+      { agendamento, message: 'Agendamento criado com sucesso' },
       { status: 201 }
     );
 
   } catch (error) {
     console.error('Error creating appointment:', error);
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }

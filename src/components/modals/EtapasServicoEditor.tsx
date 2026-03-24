@@ -13,6 +13,7 @@ interface EtapaServico {
   descricao?: string;
   duracao_minutos: number;
   pode_ter_auxiliar: boolean;
+  exige_profissional?: boolean;
 }
 
 interface EtapasServicoEditorProps {
@@ -27,6 +28,7 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
       nome: '',
       duracao_minutos: 30,
       pode_ter_auxiliar: true,
+      exige_profissional: true,
     };
     onChange([...etapas, novaEtapa]);
   };
@@ -150,9 +152,9 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
             </div>
 
             {/* Campos da etapa */}
-            <div className="grid grid-cols-12 gap-3">
+            <div className="grid grid-cols-12 gap-3 mt-3">
               {/* Duração */}
-              <div className="col-span-6">
+              <div className="col-span-4">
                 <label className="text-xs text-neutral-600 mb-1 block">
                   <Clock className="w-3 h-3 inline mr-1" />
                   Duração (min)
@@ -166,17 +168,34 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
                 />
               </div>
 
+              {/* Checkbox exige profissional */}
+              <div className="col-span-4 flex items-end">
+                <div className="flex items-center h-10 px-3 bg-neutral-50 rounded border border-neutral-200 w-full overflow-hidden">
+                  <input
+                    type="checkbox"
+                    id={`exige_profissional_${index}`}
+                    checked={etapa.exige_profissional === false}
+                    onChange={(e) => atualizarEtapa(index, 'exige_profissional', !e.target.checked)}
+                    className="flex-shrink-0 mr-2"
+                  />
+                  <label htmlFor={`exige_profissional_${index}`} className="text-sm text-neutral-700 cursor-pointer select-none truncate">
+                    Não exige presença
+                  </label>
+                </div>
+              </div>
+
               {/* Checkbox auxiliar */}
-              <div className="col-span-6 flex items-end">
-                <div className="flex items-center h-10 px-3 bg-neutral-50 rounded border border-neutral-200 w-full">
+              <div className="col-span-4 flex items-end">
+                <div className="flex items-center h-10 px-3 bg-neutral-50 rounded border border-neutral-200 w-full overflow-hidden">
                   <input
                     type="checkbox"
                     id={`auxiliar_${index}`}
                     checked={etapa.pode_ter_auxiliar}
                     onChange={(e) => atualizarEtapa(index, 'pode_ter_auxiliar', e.target.checked)}
-                    className="mr-2"
+                    disabled={etapa.exige_profissional === false}
+                    className="flex-shrink-0 mr-2 disabled:opacity-50"
                   />
-                  <label htmlFor={`auxiliar_${index}`} className="text-sm text-neutral-700 cursor-pointer select-none">
+                  <label htmlFor={`auxiliar_${index}`} className="text-sm text-neutral-700 cursor-pointer select-none truncate">
                     Pode ter auxiliar
                   </label>
                 </div>

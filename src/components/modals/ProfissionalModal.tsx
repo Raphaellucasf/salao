@@ -62,7 +62,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     // Configurações
     grupos: [] as string[],
     dias_trabalho: [] as number[],
-    horario_personalizado: false,
+    horario_personalizado: true,
     hora_inicio: '09:00',
     hora_fim: '18:00',
     horarios_por_dia: {} as Record<number, {inicio: string, fim: string}>,
@@ -94,10 +94,22 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           percentual_comissao: profissional.percentual_comissao || 50,
           grupos: profissional.grupos || [],
           dias_trabalho: profissional.dias_trabalho || [1, 2, 3, 4, 5],
-          horario_personalizado: profissional.horario_personalizado || false,
+          horario_personalizado: true,
           hora_inicio: profissional.hora_inicio || '09:00',
           hora_fim: profissional.hora_fim || '18:00',
-          horarios_por_dia: profissional.horarios_por_dia || {},
+          horarios_por_dia: (() => {
+            const existente = profissional.horarios_por_dia || {};
+            const temDados = Object.keys(existente).length > 0;
+            if (temDados) return existente;
+            // Migrar de horário padrão para personalizado
+            const dias = profissional.dias_trabalho || [1, 2, 3, 4, 5];
+            const inicio = profissional.hora_inicio || '09:00';
+            const fim = profissional.hora_fim || '18:00';
+            return dias.reduce((acc: Record<number, {inicio: string, fim: string}>, dia: number) => {
+              acc[dia] = { inicio, fim };
+              return acc;
+            }, {});
+          })(),
           comissoes_por_grupo: profissional.comissoes_por_grupo || {},
           senha_app: profissional.senha_app || '',
           é_auxiliar: profissional.é_auxiliar || false,
@@ -129,7 +141,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
       percentual_comissao: 50,
       grupos: [],
       dias_trabalho: [1, 2, 3, 4, 5], // Segunda a Sexta por padrão
-      horario_personalizado: false,
+      horario_personalizado: true,
       hora_inicio: '09:00',
       hora_fim: '18:00',
       horarios_por_dia: {},
@@ -209,6 +221,8 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
         dias_trabalho: formData.dias_trabalho,
         hora_inicio: formData.hora_inicio,
         hora_fim: formData.hora_fim,
+        horario_personalizado: true,
+        horarios_por_dia: formData.horarios_por_dia,
         ativo: formData.ativo,
         é_auxiliar: formData.é_auxiliar,
         observacoes: formData.observacoes || null,
@@ -535,73 +549,9 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           <h3 className="font-semibold text-lg text-neutral-900 mb-4">Disponibilidade *</h3>
           
           <div className="space-y-4">
-            {/* Toggle para horário personalizado */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="horario_personalizado"
-                checked={formData.horario_personalizado}
-                onChange={(e) => setFormData({ ...formData, horario_personalizado: e.target.checked })}
-                className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
-              />
-              <label htmlFor="horario_personalizado" className="text-sm font-medium text-neutral-700">
-                Horário Personalizado por Dia
-              </label>
-            </div>
-
-            {!formData.horario_personalizado ? (
-              <>
-                {/* Seleção de dias */}
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-3">
-                    Dias de Trabalho
-                  </label>
-                  <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                    {DIAS_SEMANA.map((dia) => (
-                      <label
-                        key={dia.value}
-                        className={`flex items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all text-center ${
-                          formData.dias_trabalho.includes(dia.value)
-                            ? 'border-primary-500 bg-primary-50'
-                            : 'border-neutral-200 hover:border-neutral-300'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.dias_trabalho.includes(dia.value)}
-                          onChange={() => toggleDia(dia.value)}
-                          className="sr-only"
-                        />
-                        <span className="text-sm font-medium text-neutral-700">
-                          {dia.label.substring(0, 3)}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Horário padrão */}
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Horário de Início"
-                    type="time"
-                    value={formData.hora_inicio}
-                    onChange={(e) => setFormData({ ...formData, hora_inicio: e.target.value })}
-                  />
-
-                  <Input
-                    label="Horário de Término"
-                    type="time"
-                    value={formData.hora_fim}
-                    onChange={(e) => setFormData({ ...formData, hora_fim: e.target.value })}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Horários personalizados por dia */}
-                <div className="space-y-3">
-                  {DIAS_SEMANA.map((dia) => {
+            {/* Horários personalizados por dia */}
+            <div className="space-y-3">
+              {DIAS_SEMANA.map((dia) => {
                     const diaAtivo = formData.dias_trabalho.includes(dia.value);
                     const horarios = formData.horarios_por_dia[dia.value] || { inicio: '09:00', fim: '18:00' };
                     
@@ -650,8 +600,6 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
                     );
                   })}
                 </div>
-              </>
-            )}
           </div>
         </div>
 

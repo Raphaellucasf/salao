@@ -19,8 +19,8 @@ export async function GET(request: NextRequest) {
 
     // Busca o serviço para pegar a duração
     const { data: service, error: serviceError } = await supabase
-      .from('services')
-      .select('duration_minutes')
+      .from('servicos')
+      .select('duracao_minutos')
       .eq('id', serviceId)
       .single();
 
@@ -30,26 +30,14 @@ export async function GET(request: NextRequest) {
 
     // Busca agendamentos existentes do profissional nesta data
     const { data: appointments, error: appointmentsError } = await supabase
-      .from('appointments')
-      .select('start_time, end_time')
-      .eq('professional_id', professionalId)
-      .eq('appointment_date', date)
-      .neq('status', 'cancelled');
+      .from('agendamentos')
+      .select('hora_inicio, hora_fim')
+      .eq('profissional_id', professionalId)
+      .eq('data_agendamento', date)
+      .neq('status', 'cancelado');
 
     if (appointmentsError) {
       return NextResponse.json({ error: appointmentsError.message }, { status: 500 });
-    }
-
-    // Busca horários bloqueados
-    const { data: blockedTimes, error: blockedError } = await supabase
-      .from('blocked_times')
-      .select('start_datetime, end_datetime')
-      .eq('professional_id', professionalId)
-      .gte('start_datetime', `${date}T00:00:00`)
-      .lte('start_datetime', `${date}T23:59:59`);
-
-    if (blockedError) {
-      return NextResponse.json({ error: blockedError.message }, { status: 500 });
     }
 
     // Gera todos os slots possíveis (ex: 9h às 18h, a cada 30 minutos)
@@ -70,7 +58,7 @@ export async function GET(request: NextRequest) {
     const availableSlots = allSlots.filter(slot => {
       const [hours, minutes] = slot.split(':').map(Number);
       const slotMinutes = hours * 60 + minutes;
-      const slotEndMinutes = slotMinutes + (service as any).duration_minutes;
+      const slotEndMinutes = slotMinutes + (service as any).duracao_minutos;
 
       // Verifica se o slot termina dentro do horário de trabalho
       if (slotEndMinutes > workingHours.end) {
@@ -79,29 +67,20 @@ export async function GET(request: NextRequest) {
 
       // Verifica conflito com agendamentos existentes
       const hasConflict = appointments?.some((apt: any) => {
-        const [aptStartHours, aptStartMins] = apt.start_time.split(':').map(Number);
-        const [aptEndHours, aptEndMins] = apt.end_time.split(':').map(Number);
+        const [aptStartHours, aptStartMins] = apt.hora_inicio.split(':').map(Number);
+        const [aptEndHours, aptEndMins] = apt.hora_fim.split(':').map(Number);
         const aptStart = aptStartHours * 60 + aptStartMins;
         const aptEnd = aptEndHours * 60 + aptEndMins;
 
         return (slotMinutes < aptEnd && slotEndMinutes > aptStart);
       });
 
-      // Verifica conflito com horários bloqueados
-      const hasBlockedConflict = blockedTimes?.some((blocked: any) => {
-        const blockedStart = new Date(blocked.start_datetime);
-        const blockedEnd = new Date(blocked.end_datetime);
-        const slotStart = new Date(`${date}T${slot}:00`);
-        const slotEnd = new Date(slotStart.getTime() + (service as any).duration_minutes * 60000);
-
-        return (slotStart < blockedEnd && slotEnd > blockedStart);
-      });
-
-      return !hasConflict && !hasBlockedConflict;
+      return !hasConflict;
     });
 
-    return NextResponse.json({ available_slots: availableSlots });
+    return NextResponse.json(availableSlots);
   } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error fetching availability:', error);
+    return NextResponse.json({ error: 'Erro interno ao buscar disponibilidade' }, { status: 500 });
   }
 }

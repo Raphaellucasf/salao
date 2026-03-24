@@ -73,7 +73,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     try {
       const [clientesData, produtosData, servicosData, pacotesData, profissionaisData] = await Promise.all([
         supabase.from('clientes').select('*').order('nome'),
-        supabase.from('produtos').select('*').order('nome'),
+        supabase.from('produtos').select('*').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('servicos').select('*').order('nome'),
         supabase.from('pacotes').select('*').eq('ativo', true).order('nome'),
         supabase.from('profissionais').select('id, nome, é_auxiliar').eq('ativo', true).order('nome'),
@@ -267,13 +267,13 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       return;
     }
 
-    // Se tem etapas, validar que todas estão atribuídas
+    // Se tem etapas, validar que todas estão atribuídas (exceto as que não exigem profissional)
     if (novoItem.tem_etapas && novoItem.etapas && novoItem.etapas.length > 0) {
       const todasAtribuidas = novoItem.atribuicoes_etapas?.every(
-        a => a.profissional_id || a.auxiliar_id
+        (a: any) => a.exige_profissional === false || (a.profissional_id || a.auxiliar_id)
       );
       if (!todasAtribuidas) {
-        setError('Atribua profissionais/auxiliares a todas as etapas do serviço');
+        setError('Atribua profissionais/auxiliares a todas as etapas obrigatórias do serviço');
         return;
       }
     }
@@ -298,6 +298,30 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
   const calcularTotal = () => {
     return itens.reduce((sum, item) => sum + item.valor_total, 0);
+  };
+
+  // Atualiza o estoque: delta = -1 para debitar (venda), +1 para estornar (edição)
+  const movimentarEstoque = async (itemsComanda: ComandaItem[], delta: number) => {
+    const produtoItems = itemsComanda.filter(i => i.tipo === 'produto' && i.item_id);
+    if (produtoItems.length === 0) return;
+
+    // Agrupa por produto para somar quantidades
+    const agrupado: Record<string, number> = {};
+    for (const item of produtoItems) {
+      agrupado[item.item_id!] = (agrupado[item.item_id!] || 0) + item.quantidade;
+    }
+
+    for (const [produtoId, qtd] of Object.entries(agrupado)) {
+      const { data: prod } = await supabase
+        .from('produtos')
+        .select('quantidade')
+        .eq('id', produtoId)
+        .single();
+      if (prod !== null) {
+        const novaQtd = Math.max(0, (prod.quantidade || 0) + delta * qtd);
+        await supabase.from('produtos').update({ quantidade: novaQtd }).eq('id', produtoId);
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -332,6 +356,13 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           .eq('id', comandaId);
 
         if (updateError) throw updateError;
+
+        // Estornar estoque dos itens antigos antes de deletar
+        const { data: itensAntigos } = await supabase
+          .from('comanda_itens')
+          .select('tipo, item_id, quantidade')
+          .eq('comanda_id', comandaId);
+        await movimentarEstoque(itensAntigos || [], +1);
 
         // Deletar itens antigos e suas etapas
         await supabase.from('comanda_itens').delete().eq('comanda_id', comandaId);
@@ -378,6 +409,9 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             .insert(etapasParaInserir);
           if (etapasError) throw etapasError;
         }
+
+        // Debitar estoque dos novos itens produto
+        await movimentarEstoque(itens, -1);
       } else {
         // Criar nova comanda
         const { data: novaComanda, error: insertError } = await supabase
@@ -441,6 +475,9 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             .insert(etapasParaInserir);
           if (etapasError) throw etapasError;
         }
+
+        // Debitar estoque dos itens produto na criação
+        await movimentarEstoque(itens, -1);
       }
 
       onSave();
@@ -700,7 +737,11 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
                               <span className="text-neutral-600">{etapa.duracao_minutos}min</span>
                               <span className="text-neutral-500">•</span>
                               <span className="text-blue-600 font-medium">
-                                {aux ? '🤝' : '👤'} {responsavel?.nome || 'Sem atribuição'}
+                                {etapa.exige_profissional === false ? (
+                                  '⏳ Tempo de Pausa'
+                                ) : (
+                                  <>{aux ? '🤝' : '👤'} {responsavel?.nome || 'Sem atribuição'}</>
+                                )}
                               </span>
                             </div>
                           );

@@ -17,14 +17,13 @@ export async function GET(request: NextRequest) {
     if (!query || query.trim().length < 2) {
       // Se não tem busca, retorna todos os serviços ativos
       let servicesQuery = supabase
-        .from('services')
+        .from('servicos')
         .select('*')
-        .eq('is_active', true)
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
+        .eq('ativo', true)
+        .order('categoria', { ascending: true })
+        .order('nome', { ascending: true });
 
-      if (unitId) servicesQuery = servicesQuery.eq('unit_id', unitId);
-      if (category) servicesQuery = servicesQuery.eq('category', category);
+      if (category) servicesQuery = servicesQuery.eq('categoria', category);
 
       const { data, error } = await servicesQuery;
 
@@ -42,55 +41,39 @@ export async function GET(request: NextRequest) {
 
     // 1. Busca exata no nome (prioridade máxima)
     let exactQuery = supabase
-      .from('services')
-      .select('*, score:name') // Score = nome para ordenação
-      .eq('is_active', true)
-      .ilike('name', `%${searchTerm}%`);
+      .from('servicos')
+      .select('*')
+      .eq('ativo', true)
+      .ilike('nome', `%${searchTerm}%`);
 
-    if (unitId) exactQuery = exactQuery.eq('unit_id', unitId);
-    if (category) exactQuery = exactQuery.eq('category', category);
+    if (category) exactQuery = exactQuery.eq('categoria', category);
 
     const { data: exactMatches } = await exactQuery;
 
     // 2. Busca nas keywords/tags (JSONB contains)
     let keywordsQuery = supabase
-      .from('services')
+      .from('servicos')
       .select('*')
-      .eq('is_active', true)
+      .eq('ativo', true)
       .contains('keywords', [searchTerm]);
 
-    if (unitId) keywordsQuery = keywordsQuery.eq('unit_id', unitId);
-    if (category) keywordsQuery = keywordsQuery.eq('category', category);
+    if (category) keywordsQuery = keywordsQuery.eq('categoria', category);
 
     const { data: keywordMatches } = await keywordsQuery;
 
-    // 3. Busca fuzzy nas keywords (para variações)
-    // Ex: "tingir" encontra "tingir", "pintar", etc.
+    // 3. Busca nas keywords e descrição
     let fuzzyQuery = supabase
-      .from('services')
+      .from('servicos')
       .select('*')
-      .eq('is_active', true)
-      .or(`keywords.cs.{"%${searchTerm}%"},description.ilike.%${searchTerm}%`);
+      .eq('ativo', true)
+      .or(`keywords.cs.{"%${searchTerm}%"},descricao.ilike.%${searchTerm}%`);
 
-    if (unitId) fuzzyQuery = fuzzyQuery.eq('unit_id', unitId);
-    if (category) fuzzyQuery = fuzzyQuery.eq('category', category);
+    if (category) fuzzyQuery = fuzzyQuery.eq('categoria', category);
 
     const { data: fuzzyMatches } = await fuzzyQuery;
 
-    // 4. Busca com Full-Text Search (se disponível)
-    let ftsQuery = supabase
-      .from('services')
-      .select('*')
-      .eq('is_active', true)
-      .textSearch('search_vector', searchTerm, {
-        type: 'websearch',
-        config: 'portuguese'
-      });
-
-    if (unitId) ftsQuery = ftsQuery.eq('unit_id', unitId);
-    if (category) ftsQuery = ftsQuery.eq('category', category);
-
-    const { data: ftsMatches } = await ftsQuery;
+    // Sem FTS (search_vector não disponível na nova tabela)
+    const ftsMatches: any[] = [];
 
     // =====================================================
     // COMBINAR E REMOVER DUPLICATAS
@@ -110,7 +93,7 @@ export async function GET(request: NextRequest) {
           let score = 0;
           
           // Nome exato = alta prioridade
-          if (service.name.toLowerCase().includes(searchTerm)) {
+          if (service.nome?.toLowerCase().includes(searchTerm)) {
             score += 100;
           }
           

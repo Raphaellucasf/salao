@@ -4,9 +4,8 @@ import { useState, useEffect } from 'react';
 import { BarChart3, DollarSign, Users, ShoppingBag, Scissors, TrendingUp, Calendar, Download, FileText, Filter, FileDown } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// XLSX e jsPDF são importados dinamicamente apenas quando o usuário clicar em exportar
+// Isso remove ~1MB do bundle inicial da página
 import {
   buscarFaturamento,
   buscarClientes,
@@ -172,6 +171,8 @@ export default function RelatoriosPage() {
         return;
       }
 
+      const XLSX = await import('xlsx');
+
       // Cria uma nova planilha
       const worksheet = XLSX.utils.json_to_sheet(dados);
       
@@ -208,6 +209,8 @@ export default function RelatoriosPage() {
         return;
       }
 
+      const XLSX = await import('xlsx');
+
       // Cria uma planilha e converte para CSV
       const worksheet = XLSX.utils.json_to_sheet(dados);
       const csv = XLSX.utils.sheet_to_csv(worksheet);
@@ -242,6 +245,9 @@ export default function RelatoriosPage() {
         alert('Nenhum dado disponível para exportação no período selecionado.');
         return;
       }
+
+      const { default: jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
 
       // Cria um novo documento PDF
       const doc = new jsPDF({

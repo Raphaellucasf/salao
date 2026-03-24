@@ -18,8 +18,11 @@ export default function HomePage() {
               </div>
               <h1 className="text-xl font-bold text-neutral-900">Otimiza Beauty</h1>
             </div>
-            <Link href="/login">
-              <Button variant="ghost" size="sm">Entrar</Button>
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 text-neutral-900 hover:bg-neutral-200 focus:ring-neutral-500 px-3 py-1.5 text-sm"
+            >
+              Entrar
             </Link>
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, ShoppingBag, DollarSign, Receipt, Plus, X, Package as PackageIcon, FileText, MessageSquare, Search, FileStack } from 'lucide-react';
+import { Calendar, ShoppingBag, DollarSign, Receipt, Plus, X, Package as PackageIcon, MessageSquare, Search, FileStack } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface QuickAction {
@@ -49,14 +49,6 @@ export default function QuickActions() {
       color: 'from-purple-500 to-purple-600',
       shortcut: 'F4',
       onClick: () => router.push('/admin/pacotes'),
-    },
-    {
-      id: 'receive-payment',
-      name: 'Recebimento de Débito',
-      icon: FileText,
-      color: 'from-orange-500 to-orange-600',
-      shortcut: 'Ctrl+D',
-      onClick: () => router.push('/admin/contas-receber'),
     },
     {
       id: 'send-message',

@@ -11,6 +11,7 @@ interface EtapaAtribuicao {
   duracao_minutos: number;
   profissional_id?: string;
   auxiliar_id?: string;
+  exige_profissional?: boolean;
 }
 
 interface AtribuirEtapasServicoProps {
@@ -37,8 +38,9 @@ export default function AtribuirEtapasServico({
       ordem: etapa.ordem,
       nome: etapa.nome,
       duracao_minutos: etapa.duracao_minutos,
-      profissional_id: etapa.pode_ter_auxiliar ? undefined : profissionalPrincipalId,
-      auxiliar_id: undefined
+      profissional_id: (etapa.exige_profissional === false) ? undefined : profissionalPrincipalId,
+      auxiliar_id: undefined,
+      exige_profissional: etapa.exige_profissional !== false
     }));
     setAtribuicoes(iniciais);
   }, [etapas, profissionalPrincipalId]);
@@ -65,7 +67,7 @@ export default function AtribuirEtapasServico({
     setAtribuicoes(novasAtribuicoes);
   };
 
-  const todosAtribuidos = atribuicoes.every(a => a.profissional_id || a.auxiliar_id);
+  const todosAtribuidos = atribuicoes.every(a => a.exige_profissional === false || (a.profissional_id || a.auxiliar_id));
   const duracaoTotal = atribuicoes.reduce((total, a) => total + a.duracao_minutos, 0);
 
   return (
@@ -111,7 +113,11 @@ export default function AtribuirEtapasServico({
 
               {/* Seletor de profissional/auxiliar */}
               <div className="flex-shrink-0 w-48">
-                {etapaOriginal?.pode_ter_auxiliar ? (
+                {atribuicao.exige_profissional === false ? (
+                  <div className="w-full px-2 py-1.5 text-xs text-center border border-dashed border-neutral-300 rounded bg-neutral-50 text-neutral-500">
+                    ⏳ Tempo de Pausa
+                  </div>
+                ) : etapaOriginal?.pode_ter_auxiliar ? (
                   <select
                     value={atribuicao.profissional_id || atribuicao.auxiliar_id || ''}
                     onChange={(e) => {
@@ -187,7 +193,7 @@ export default function AtribuirEtapasServico({
         <div className="text-center">
           <p className="text-neutral-600 text-xs">Status</p>
           <p className={`font-bold ${todosAtribuidos ? 'text-green-600' : 'text-orange-600'}`}>
-            {todosAtribuidos ? '✓ Completo' : `${atribuicoes.filter(a => a.profissional_id || a.auxiliar_id).length}/${atribuicoes.length}`}
+            {todosAtribuidos ? '✓ Completo' : `${atribuicoes.filter(a => a.exige_profissional === false || a.profissional_id || a.auxiliar_id).length}/${atribuicoes.length}`}
           </p>
         </div>
       </div>

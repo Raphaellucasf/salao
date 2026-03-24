@@ -7,8 +7,9 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import AdminSidebarNew from '@/components/layout/AdminSidebarNew';
 import QuickActions from '@/components/layout/QuickActions';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import MensagemAvisoModal from '@/components/modals/MensagemAvisoModal';
-import BuscarAgendaModal from '@/components/modals/BuscarAgendaModal';
+import dynamic from 'next/dynamic';
+const MensagemAvisoModal = dynamic(() => import('@/components/modals/MensagemAvisoModal'), { ssr: false });
+const BuscarAgendaModal = dynamic(() => import('@/components/modals/BuscarAgendaModal'), { ssr: false });
 
 export default function AdminLayout({
   children,
@@ -40,12 +41,6 @@ export default function AdminLayout({
       key: 'F8',
       callback: () => router.push('/admin/comandas'),
       description: 'Fechamento de Comanda',
-    },
-    {
-      key: 'd',
-      ctrl: true,
-      callback: () => router.push('/admin/contas-receber'),
-      description: 'Recebimento de Débito',
     },
     {
       key: 'm',

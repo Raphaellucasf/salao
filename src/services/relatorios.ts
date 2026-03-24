@@ -14,12 +14,12 @@ const formatDate = (date: Date): string => {
 export async function buscarFaturamento(periodo: PeriodoFiltro) {
   try {
     const { data, error } = await supabase
-      .from('transactions')
+      .from('transacoes')
       .select('*')
-      .eq('type', 'income')
-      .gte('transaction_date', formatDate(periodo.dataInicio))
-      .lte('transaction_date', formatDate(periodo.dataFim))
-      .order('transaction_date', { ascending: false });
+      .eq('tipo', 'receita')
+      .gte('data', formatDate(periodo.dataInicio))
+      .lte('data', formatDate(periodo.dataFim))
+      .order('data', { ascending: false });
 
     if (error) {
       console.error('Erro ao buscar faturamento:', error);
@@ -31,11 +31,11 @@ export async function buscarFaturamento(periodo: PeriodoFiltro) {
     }
 
     return data.map((t: any) => ({
-      Data: new Date(t.transaction_date).toLocaleDateString('pt-BR'),
-      Descrição: t.description || 'N/A',
-      Valor: t.amount,
-      Pagamento: formatPaymentMethod(t.payment_method),
-      Tipo: t.type === 'income' ? 'Receita' : t.type === 'expense' ? 'Despesa' : 'Comissão',
+      Data: new Date(t.data).toLocaleDateString('pt-BR'),
+      Descrição: t.descricao || 'N/A',
+      Valor: t.valor,
+      Pagamento: t.metodo || 'N/A',
+      Tipo: t.tipo === 'receita' ? 'Receita' : t.tipo === 'despesa' ? 'Despesa' : 'Comissão',
     }));
   } catch (error) {
     console.error('Erro ao buscar faturamento:', error);
@@ -47,10 +47,9 @@ export async function buscarFaturamento(periodo: PeriodoFiltro) {
 export async function buscarClientes(periodo: PeriodoFiltro) {
   try {
     const { data, error } = await supabase
-      .from('users')
-      .select('id, full_name, phone, email, created_at')
-      .eq('role', 'client')
-      .order('full_name');
+      .from('clientes')
+      .select('id, nome, telefone, email, created_at')
+      .order('nome');
 
     if (error) {
       console.error('Erro ao buscar clientes:', error);
@@ -61,35 +60,34 @@ export async function buscarClientes(periodo: PeriodoFiltro) {
       return [];
     }
 
-    // Busca appointments separadamente
-    const { data: appointments } = await supabase
-      .from('appointments')
-      .select('client_id, appointment_date, status')
-      .gte('appointment_date', formatDate(periodo.dataInicio))
-      .lte('appointment_date', formatDate(periodo.dataFim));
+    const { data: agendamentos } = await supabase
+      .from('agendamentos')
+      .select('cliente_id, data_agendamento, status')
+      .gte('data_agendamento', formatDate(periodo.dataInicio))
+      .lte('data_agendamento', formatDate(periodo.dataFim));
 
     return data
       .map((cliente: any) => {
-        const clienteAppointments = (appointments || []).filter(
-          (apt: any) => apt.client_id === cliente.id
+        const clienteAgendamentos = (agendamentos || []).filter(
+          (ag: any) => ag.cliente_id === cliente.id
         );
 
-        if (clienteAppointments.length === 0) return null;
+        if (clienteAgendamentos.length === 0) return null;
 
-        const ultimaVisita = clienteAppointments.reduce((latest: any, apt: any) => {
-          return !latest || new Date(apt.appointment_date) > new Date(latest.appointment_date)
-            ? apt
+        const ultimaVisita = clienteAgendamentos.reduce((latest: any, ag: any) => {
+          return !latest || new Date(ag.data_agendamento) > new Date(latest.data_agendamento)
+            ? ag
             : latest;
         }, null);
 
         return {
-          Nome: cliente.full_name,
-          Telefone: cliente.phone || 'N/A',
+          Nome: cliente.nome,
+          Telefone: cliente.telefone || 'N/A',
           Email: cliente.email || 'N/A',
           'Última Visita': ultimaVisita
-            ? new Date(ultimaVisita.appointment_date).toLocaleDateString('pt-BR')
+            ? new Date(ultimaVisita.data_agendamento).toLocaleDateString('pt-BR')
             : 'N/A',
-          Visitas: clienteAppointments.length,
+          Visitas: clienteAgendamentos.length,
           Status: 'Ativo',
         };
       })
@@ -104,9 +102,9 @@ export async function buscarClientes(periodo: PeriodoFiltro) {
 export async function buscarServicos(periodo: PeriodoFiltro) {
   try {
     const { data, error } = await supabase
-      .from('services')
-      .select('id, name, price, duration_minutes, category')
-      .eq('is_active', true);
+      .from('servicos')
+      .select('id, nome, preco, duracao_minutos, categoria')
+      .eq('ativo', true);
 
     if (error) {
       console.error('Erro ao buscar serviços:', error);
@@ -117,31 +115,36 @@ export async function buscarServicos(periodo: PeriodoFiltro) {
       return [];
     }
 
-    // Busca appointments separadamente
-    const { data: appointments } = await supabase
-      .from('appointments')
-      .select('service_id, appointment_date, status')
-      .gte('appointment_date', formatDate(periodo.dataInicio))
-      .lte('appointment_date', formatDate(periodo.dataFim))
-      .eq('status', 'completed');
+    // Contar uso via coluna JSONB de agendamentos concluídos
+    const { data: agendamentos } = await supabase
+      .from('agendamentos')
+      .select('servicos')
+      .gte('data_agendamento', formatDate(periodo.dataInicio))
+      .lte('data_agendamento', formatDate(periodo.dataFim))
+      .eq('status', 'concluido');
+
+    const contagemServicos: Record<string, number> = {};
+    (agendamentos || []).forEach((ag: any) => {
+      try {
+        const servs = typeof ag.servicos === 'string' ? JSON.parse(ag.servicos) : ag.servicos;
+        if (Array.isArray(servs)) {
+          servs.forEach((s: any) => {
+            if (s.id) contagemServicos[s.id] = (contagemServicos[s.id] || 0) + 1;
+          });
+        }
+      } catch {}
+    });
 
     return data
       .map((servico: any) => {
-        const servicoAppointments = (appointments || []).filter(
-          (apt: any) => apt.service_id === servico.id
-        );
-
-        if (servicoAppointments.length === 0) return null;
-
+        const qtd = contagemServicos[servico.id] || 0;
+        if (qtd === 0) return null;
         return {
-          Serviço: servico.name,
-          Categoria: servico.category || 'Geral',
-          'Qtd Realizada': servicoAppointments.length,
-          'Duração': `${servico.duration_minutes} min`,
-          'Valor': servico.price.toLocaleString('pt-BR', {
-            style: 'currency',
-            currency: 'BRL',
-          }),
+          Serviço: servico.nome,
+          Categoria: servico.categoria || 'Geral',
+          'Qtd Realizada': qtd,
+          Duração: `${servico.duracao_minutos} min`,
+          Valor: (servico.preco || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
         };
       })
       .filter(Boolean)
@@ -156,9 +159,9 @@ export async function buscarServicos(periodo: PeriodoFiltro) {
 export async function buscarProdutos(periodo: PeriodoFiltro) {
   try {
     const { data, error } = await supabase
-      .from('inventory')
-      .select('id, name, category, quantity, cost_price, sale_price')
-      .order('name');
+      .from('produtos')
+      .select('id, nome, categoria, quantidade, preco_custo, preco_venda')
+      .order('nome');
 
     if (error) {
       console.error('Erro ao buscar produtos:', error);
@@ -169,20 +172,16 @@ export async function buscarProdutos(periodo: PeriodoFiltro) {
       return [];
     }
 
-    // Nota: Atualmente não há tabela de vendas de produtos
-    // Retorna apenas informações de estoque
     return data.map((produto: any) => ({
-      Produto: produto.name,
-      Categoria: produto.category || 'Geral',
-      'Estoque Atual': produto.quantity,
-      'Preço Custo': produto.cost_price?.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }) || 'N/A',
-      'Preço Venda': produto.sale_price?.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }) || 'N/A',
+      Produto: produto.nome,
+      Categoria: produto.categoria || 'Geral',
+      'Estoque Atual': produto.quantidade ?? 0,
+      'Preço Custo': produto.preco_custo != null
+        ? produto.preco_custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        : 'N/A',
+      'Preço Venda': produto.preco_venda != null
+        ? produto.preco_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        : 'N/A',
     }));
   } catch (error) {
     console.error('Erro ao buscar produtos:', error);
@@ -193,45 +192,35 @@ export async function buscarProdutos(periodo: PeriodoFiltro) {
 // ==================== RELATÓRIO DE PROFISSIONAIS ====================
 export async function buscarProfissionais(periodo: PeriodoFiltro) {
   try {
-    const { data: professionals, error: profError } = await supabase
-      .from('professionals')
-      .select('id, user_id, commission_percentage, rating')
-      .eq('is_active', true);
+    const { data: profissionais, error: profError } = await supabase
+      .from('profissionais')
+      .select('id, nome, percentual_comissao')
+      .eq('ativo', true);
 
-    if (profError || !professionals || professionals.length === 0) {
+    if (profError || !profissionais || profissionais.length === 0) {
       console.error('Erro ao buscar profissionais:', profError);
       return [];
     }
 
-    // Busca users separadamente
-    const userIds = professionals.map((p: any) => p.user_id);
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, full_name')
-      .in('id', userIds);
+    const { data: agendamentos } = await supabase
+      .from('agendamentos')
+      .select('profissional_id, data_agendamento, status')
+      .gte('data_agendamento', formatDate(periodo.dataInicio))
+      .lte('data_agendamento', formatDate(periodo.dataFim))
+      .eq('status', 'concluido');
 
-    // Busca appointments
-    const { data: appointments } = await supabase
-      .from('appointments')
-      .select('professional_id, appointment_date, status')
-      .gte('appointment_date', formatDate(periodo.dataInicio))
-      .lte('appointment_date', formatDate(periodo.dataFim))
-      .eq('status', 'completed');
-
-    return professionals
+    return profissionais
       .map((prof: any) => {
-        const user = (users || []).find((u: any) => u.id === prof.user_id);
-        const profAppointments = (appointments || []).filter(
-          (apt: any) => apt.professional_id === prof.id
+        const profAgendamentos = (agendamentos || []).filter(
+          (ag: any) => ag.profissional_id === prof.id
         );
 
-        if (profAppointments.length === 0) return null;
+        if (profAgendamentos.length === 0) return null;
 
         return {
-          Profissional: (user as any)?.full_name || 'N/A',
-          'Atendimentos': profAppointments.length,
-          'Comissão': `${prof.commission_percentage}%`,
-          'Avaliação': `${prof.rating || 5.0}/5.0`,
+          Profissional: prof.nome,
+          Atendimentos: profAgendamentos.length,
+          Comissão: `${prof.percentual_comissao || 0}%`,
           Status: 'Ativo',
         };
       })
@@ -247,11 +236,11 @@ export async function buscarProfissionais(periodo: PeriodoFiltro) {
 export async function buscarAgenda(periodo: PeriodoFiltro) {
   try {
     const { data, error } = await supabase
-      .from('appointments')
-      .select('id, appointment_date, status')
-      .gte('appointment_date', formatDate(periodo.dataInicio))
-      .lte('appointment_date', formatDate(periodo.dataFim))
-      .order('appointment_date');
+      .from('agendamentos')
+      .select('id, data_agendamento, status')
+      .gte('data_agendamento', formatDate(periodo.dataInicio))
+      .lte('data_agendamento', formatDate(periodo.dataFim))
+      .order('data_agendamento');
 
     if (error) {
       console.error('Erro ao buscar agenda:', error);
@@ -265,10 +254,10 @@ export async function buscarAgenda(periodo: PeriodoFiltro) {
     // Agrupa por data
     const porData: Record<string, any> = {};
 
-    data.forEach((apt: any) => {
-      const data = apt.appointment_date;
-      if (!porData[data]) {
-        porData[data] = {
+    data.forEach((ag: any) => {
+      const d = ag.data_agendamento;
+      if (!porData[d]) {
+        porData[d] = {
           total: 0,
           realizados: 0,
           cancelados: 0,
@@ -276,11 +265,11 @@ export async function buscarAgenda(periodo: PeriodoFiltro) {
         };
       }
 
-      porData[data].total++;
+      porData[d].total++;
 
-      if (apt.status === 'completed') porData[data].realizados++;
-      if (apt.status === 'cancelled') porData[data].cancelados++;
-      if (apt.status === 'no_show') porData[data].noShow++;
+      if (ag.status === 'concluido') porData[d].realizados++;
+      if (ag.status === 'cancelado') porData[d].cancelados++;
+      if (ag.status === 'faltou')    porData[d].noShow++;
     });
 
     return Object.entries(porData).map(([data, stats]) => ({
@@ -298,17 +287,6 @@ export async function buscarAgenda(periodo: PeriodoFiltro) {
 }
 
 // ==================== UTILITÁRIOS ====================
-function formatPaymentMethod(method: string): string {
-  const methods: Record<string, string> = {
-    cash: 'Dinheiro',
-    card: 'Cartão',
-    pix: 'PIX',
-    other: 'Outro',
-  };
-  return methods[method] || method;
-}
-
-// Função para obter período pré-definido
 export function getPeriodo(tipo: string): PeriodoFiltro {
   const hoje = new Date();
   const dataFim = new Date(hoje);

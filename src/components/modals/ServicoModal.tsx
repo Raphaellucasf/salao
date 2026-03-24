@@ -63,7 +63,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
       setObservacoes(servico.observacoes || '');
       setGrupoId(servico.grupo_id || '');
       // Não seta temEtapas aqui - será setado ao carregar etapas
-      setDuracaoCalculada(servico.duracao_calculada || false);
+      // duracaoCalculada será definido ao carregar etapas (sempre true se tiver etapas)
       
       // Sempre tenta carregar etapas ao editar (se houver ID)
       if (servico.id) {
@@ -220,6 +220,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         descricao: etapa.descricao || null,
         duracao_minutos: etapa.duracao_minutos,
         pode_ter_auxiliar: etapa.pode_ter_auxiliar !== false,
+        exige_profissional: etapa.exige_profissional !== false,
         ativo: true
       }));
 
@@ -342,7 +343,8 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
                       ordem: 1,
                       nome: 'Execução',
                       duracao_minutos: parseInt(duracao) || 60,
-                      pode_ter_auxiliar: true
+                      pode_ter_auxiliar: true,
+                      exige_profissional: true
                     }]);
                     setDuracaoCalculada(true);
                   }
@@ -351,19 +353,6 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
               />
               <label htmlFor="tem_etapas" className="text-sm font-medium">Este serviço possui etapas</label>
             </div>
-
-            {temEtapas && (
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="duracao_calculada"
-                  checked={duracaoCalculada}
-                  onChange={(e) => setDuracaoCalculada(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="duracao_calculada" className="text-sm text-neutral-700">Calcular duração automaticamente</label>
-              </div>
-            )}
           </div>
 
           {temEtapas && (

@@ -48,42 +48,51 @@ export default function AgendamentosFuturosPage() {
       }
 
       const { data, error } = await supabase
-        .from('appointments')
+        .from('agendamentos')
         .select(`
           id,
-          data_hora,
+          data_agendamento,
+          hora_inicio,
           status,
-          valor,
+          valor_total,
           observacoes,
+          servicos,
           clientes (
             nome,
             telefone
           ),
-          usuarios (
-            nome
-          ),
-          servicos (
+          profissionais (
             nome
           )
         `)
-        .gte('data_hora', hoje.toISOString())
-        .lte('data_hora', dataLimite.toISOString())
+        .gte('data_agendamento', hoje.toISOString().split('T')[0])
+        .lte('data_agendamento', dataLimite.toISOString().split('T')[0])
         .in('status', ['agendado', 'confirmado'])
-        .order('data_hora', { ascending: true });
+        .order('data_agendamento', { ascending: true })
+        .order('hora_inicio', { ascending: true });
 
       if (error) throw error;
 
-      const agendamentosFormatados = (data || []).map((ag: any) => ({
-        id: ag.id,
-        data_hora: ag.data_hora,
-        cliente_nome: ag.clientes?.nome || 'Cliente não informado',
-        cliente_telefone: ag.clientes?.telefone,
-        profissional_nome: ag.usuarios?.nome || 'Profissional não informado',
-        servico_nome: ag.servicos?.nome || 'Serviço não informado',
-        status: ag.status,
-        valor: ag.valor,
-        observacoes: ag.observacoes
-      }));
+      const agendamentosFormatados = (data || []).map((ag: any) => {
+        let servicoNome = 'Serviço não informado';
+        try {
+          const servs = typeof ag.servicos === 'string' ? JSON.parse(ag.servicos) : ag.servicos;
+          if (Array.isArray(servs) && servs.length > 0) {
+            servicoNome = servs.map((s: any) => s.nome).join(', ');
+          }
+        } catch {}
+        return {
+          id: ag.id,
+          data_hora: `${ag.data_agendamento}T${ag.hora_inicio}`,
+          cliente_nome: ag.clientes?.nome || 'Cliente não informado',
+          cliente_telefone: ag.clientes?.telefone,
+          profissional_nome: ag.profissionais?.nome || 'Profissional não informado',
+          servico_nome: servicoNome,
+          status: ag.status,
+          valor: ag.valor_total,
+          observacoes: ag.observacoes,
+        };
+      });
 
       setAgendamentos(agendamentosFormatados);
     } catch (error) {

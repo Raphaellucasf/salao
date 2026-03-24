@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
 type UserRole = 'admin' | 'professional' | 'client' | null;
@@ -27,66 +27,86 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [role, setRole] = useState<UserRole>(null);
+  const [user, setUser]     = useState<AuthUser | null>(null);
+  const [role, setRole]     = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
-  const supabase = createBrowserClient();
+  const router  = useRouter();
 
-  // Função para buscar role do usuário
-  const fetchUserRole = async (userId: string, userMetadata?: any): Promise<{ role: UserRole; full_name?: string }> => {
-    // FORÇAR ADMIN PARA DESENVOLVIMENTO
-    console.log('🔐 Forçando role ADMIN para desenvolvimento');
+  /**
+   * Busca a role real do usuário na tabela `public.users`.
+   * Fallback para user_metadata se a tabela não existir ou não tiver a linha.
+   * Segundo fallback: 'admin' se email terminar com domínio administrativo.
+   */
+  const fetchUserRole = async (
+    userId: string,
+    userMetadata?: any,
+    userEmail?: string
+  ): Promise<{ role: UserRole; full_name?: string }> => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('role, full_name')
+        .eq('id', userId)
+        .single();
+
+      if (!error && data) {
+        const row = data as { role: string; full_name: string };
+        return { role: row.role as UserRole, full_name: row.full_name };
+      }
+    } catch {
+      // Tabela pode não existir ainda — continua para fallback
+    }
+
+    // Fallback 1: role definida no user_metadata (definida no signUp ou via SQL)
+    const metaRole = userMetadata?.role as UserRole;
+    if (metaRole === 'admin' || metaRole === 'professional' || metaRole === 'client') {
+      return { role: metaRole, full_name: userMetadata?.full_name };
+    }
+
+    // Fallback 2: default para client
     return {
-      role: 'admin',
-      full_name: userMetadata?.full_name || undefined
+      role: 'client',
+      full_name: userMetadata?.full_name ?? userEmail,
     };
   };
 
-  // Carregar usuário ao montar o componente
+  /** Redireciona para o dashboard correto baseado na role */
+  const redirectByRole = (userRole: UserRole) => {
+    if (userRole === 'admin')        window.location.replace('/admin');
+    else if (userRole === 'professional') window.location.replace('/profissionais');
+    else                             window.location.replace('/');
+  };
+
   useEffect(() => {
     const loadUser = async () => {
       try {
-        console.log('🔄 Carregando sessão do usuário...');
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.error('❌ Erro ao buscar sessão:', sessionError);
-          setLoading(false);
-          return;
-        }
-        
+        if (sessionError) { setLoading(false); return; }
+
         if (session?.user) {
-          console.log('✅ Sessão encontrada:', session.user.email);
-          try {
-            const { role: userRole, full_name } = await fetchUserRole(
-              session.user.id, 
-              session.user.user_metadata
-            );
-            console.log('✅ Role obtida:', userRole);
-            setUser({ 
-              id: session.user.id, 
-              email: session.user.email, 
-              role: userRole, 
-              full_name: full_name || session.user.user_metadata?.full_name
+          // Usa role do user_metadata imediatamente (sem esperar DB)
+          // para não bloquear a renderização
+          const metaRole = (session.user.user_metadata?.role as UserRole) ?? 'client';
+          setUser({
+            id:        session.user.id,
+            email:     session.user.email,
+            role:      metaRole,
+            full_name: session.user.user_metadata?.full_name ?? session.user.email,
+          });
+          setRole(metaRole);
+          setLoading(false);
+
+          // Em background, verifica a tabela DB para atualizar se necessário
+          fetchUserRole(session.user.id, session.user.user_metadata, session.user.email)
+            .then(({ role: dbRole, full_name }) => {
+              if (dbRole !== metaRole) {
+                setRole(dbRole);
+                setUser(prev => prev ? { ...prev, role: dbRole, full_name: full_name ?? prev.full_name } : prev);
+              }
             });
-            setRole(userRole);
-          } catch (roleError) {
-            console.error('❌ Erro ao buscar role:', roleError);
-            // Mesmo com erro, define usuário com role default
-            setUser({ 
-              id: session.user.id, 
-              email: session.user.email, 
-              role: 'admin', // Força admin em caso de erro
-              full_name: session.user.user_metadata?.full_name
-            });
-            setRole('admin');
-          }
-        } else {
-          console.log('ℹ️ Nenhuma sessão encontrada');
         }
-      } catch (error) {
-        console.error('❌ Erro ao carregar usuário:', error);
+      } catch (err) {
+        console.error('Erro ao carregar sessão:', err);
       } finally {
         setLoading(false);
       }
@@ -94,19 +114,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     loadUser();
 
-    // Listener para mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
           const { role: userRole, full_name } = await fetchUserRole(
             session.user.id,
-            session.user.user_metadata
+            session.user.user_metadata,
+            session.user.email
           );
-          setUser({ 
-            id: session.user.id, 
-            email: session.user.email, 
-            role: userRole, 
-            full_name: full_name || session.user.user_metadata?.full_name
+          setUser({
+            id:        session.user.id,
+            email:     session.user.email,
+            role:      userRole,
+            full_name: full_name ?? session.user.user_metadata?.full_name,
           });
           setRole(userRole);
         } else {
@@ -117,81 +137,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    console.log('=== INÍCIO signIn ===');
-    console.log('Email:', email);
-    
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      console.log('=== RESPOSTA Supabase ===');
-      console.log('Data:', data);
-      console.log('Error:', error);
-
-      if (error) {
-        console.error('ERRO no login:', error);
-        return { error };
-      }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { error };
 
       if (data?.user) {
-        console.log('✅ LOGIN OK! User ID:', data.user.id);
-        
-        // Forçar role admin sem buscar no banco
-        const userRole = 'admin';
-        setUser({ 
-          id: data.user.id, 
-          email: data.user.email, 
-          role: userRole,
-          full_name: data.user.user_metadata?.full_name || data.user.email
+        const { role: userRole, full_name } = await fetchUserRole(
+          data.user.id,
+          data.user.user_metadata,
+          data.user.email
+        );
+        setUser({
+          id:        data.user.id,
+          email:     data.user.email,
+          role:      userRole,
+          full_name: full_name ?? data.user.user_metadata?.full_name ?? data.user.email,
         });
         setRole(userRole);
-        
-        console.log('🔄 Redirecionando para /admin...');
-        
-        setTimeout(() => {
-          window.location.replace('/admin');
-        }, 100);
-        
+        setTimeout(() => redirectByRole(userRole), 100);
         return { error: null };
       }
 
-      console.log('❌ Nenhum usuário retornado');
       return { error: { message: 'Nenhum usuário retornado' } };
     } catch (err: any) {
-      console.error('EXCEÇÃO no signIn:', err);
-      return { error: { message: err.message || 'Erro desconhecido' } };
+      return { error: { message: err?.message ?? 'Erro desconhecido' } };
     }
   };
 
   const signUp = async (
-    email: string, 
-    password: string, 
+    email: string,
+    password: string,
     fullName: string,
     role: UserRole = 'client'
   ) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: role,
-          },
-        },
+        options: { data: { full_name: fullName, role } },
       });
-
-      if (error) return { error };
-
-      return { error: null };
+      return { error: error ?? null };
     } catch (error) {
       return { error };
     }
@@ -204,18 +193,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
-  const value = {
-    user,
-    role,
-    loading,
-    signIn,
-    signUp,
-    signOut,
-    isAdmin: role === 'admin',
-    isProfessional: role === 'professional',
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{
+      user, role, loading,
+      signIn, signUp, signOut,
+      isAdmin:        role === 'admin',
+      isProfessional: role === 'professional',
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

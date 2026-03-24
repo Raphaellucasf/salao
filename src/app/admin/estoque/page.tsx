@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 
 export default function EstoquePage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategoria, setFilterCategoria] = useState<'todos' | 'revenda' | 'backbar'>('todos');
+  const [filterCategoria, setFilterCategoria] = useState<'todos' | 'uso_interno'>('todos');
   const [produtos, setProdutos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -25,6 +25,7 @@ export default function EstoquePage() {
       const { data, error } = await supabase
         .from('produtos')
         .select('*')
+        .eq('tipo', 'uso_interno')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -66,7 +67,7 @@ export default function EstoquePage() {
 
   const filteredProdutos = produtos.filter(produto => {
     const matchesSearch = produto.nome.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategoria = filterCategoria === 'todos' || produto.categoria === filterCategoria;
+    const matchesCategoria = filterCategoria === 'todos' || produto.tipo === filterCategoria;
     return matchesSearch && matchesCategoria;
   });
 
@@ -88,8 +89,8 @@ export default function EstoquePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-neutral-900">Estoque</h1>
-          <p className="text-neutral-600 mt-1">Controle de produtos e inventário</p>
+          <h1 className="text-3xl font-bold text-neutral-900">Estoque Interno</h1>
+          <p className="text-neutral-600 mt-1">Produtos para uso no salão (colorações, tratamentos, insumos)</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -162,16 +163,10 @@ export default function EstoquePage() {
               Todos
             </Button>
             <Button
-              variant={filterCategoria === 'revenda' ? 'primary' : 'secondary'}
-              onClick={() => setFilterCategoria('revenda')}
+              variant={filterCategoria === 'uso_interno' ? 'primary' : 'secondary'}
+              onClick={() => setFilterCategoria('uso_interno')}
             >
-              Revenda
-            </Button>
-            <Button
-              variant={filterCategoria === 'backbar' ? 'primary' : 'secondary'}
-              onClick={() => setFilterCategoria('backbar')}
-            >
-              BackBar
+              Uso Interno
             </Button>
           </div>
         </div>
@@ -210,8 +205,8 @@ export default function EstoquePage() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <Badge variant={produto.categoria === 'revenda' ? 'default' : 'warning'}>
-                        {produto.categoria === 'revenda' ? 'Revenda' : 'BackBar'}
+                      <Badge variant="warning">
+                        {produto.categoria || produto.tipo || 'Uso Interno'}
                       </Badge>
                     </td>
                     <td className="p-4">
@@ -230,7 +225,7 @@ export default function EstoquePage() {
                     </td>
                     <td className="p-4">
                       <p className="text-sm font-semibold text-green-600">
-                        {produto.preco > 0 ? `R$ ${produto.preco.toFixed(2)}` : '-'}
+                        {produto.preco_venda > 0 ? `R$ ${produto.preco_venda.toFixed(2)}` : '-'}
                       </p>
                     </td>
                     <td className="p-4">
