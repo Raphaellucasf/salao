@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
+import { X as XIcon } from 'lucide-react';
 import EtapasServicoEditor from './EtapasServicoEditor';
 
 interface ServicoModalProps {
@@ -19,7 +20,8 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
   const [codigo, setCodigo] = useState('');
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [categoria, setCategoria] = useState('');
+  const [termosBusca, setTermosBusca] = useState<string[]>([]);
+  const [termoInput, setTermoInput] = useState('');
   const [duracao, setDuracao] = useState('60');
   const [preco, setPreco] = useState('');
   const [ativo, setAtivo] = useState(true);
@@ -36,7 +38,8 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     setCodigo('');
     setNome('');
     setDescricao('');
-    setCategoria('');
+    setTermosBusca([]);
+    setTermoInput('');
     setDuracao('60');
     setPreco('');
     setAtivo(true);
@@ -56,7 +59,8 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
       setCodigo(servico.codigo || '');
       setNome(servico.nome || '');
       setDescricao(servico.descricao || '');
-      setCategoria(servico.categoria || '');
+      setTermosBusca(Array.isArray(servico.termos_busca) ? servico.termos_busca : []);
+      setTermoInput('');
       setDuracao(String(servico.duracao_minutos || servico.duracao || 60));
       setPreco(String(servico.preco || ''));
       setAtivo(servico.ativo !== false);
@@ -160,7 +164,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         codigo: codigo || null,
         nome,
         descricao,
-        categoria: categoria || null,
+        termos_busca: termosBusca,
         duracao_minutos: duracaoFinal,
         preco: parseFloat(preco),
         ativo,
@@ -203,7 +207,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     } finally {
       setLoading(false);
     }
-  }, [nome, preco, grupoId, codigo, descricao, categoria, duracao, ativo, observacoes, servico, temEtapas, duracaoCalculada, etapas, onSuccess, handleClose]);
+  }, [nome, preco, grupoId, codigo, descricao, termosBusca, duracao, ativo, observacoes, servico, temEtapas, duracaoCalculada, etapas, onSuccess, handleClose]);
 
   const salvarEtapas = async (servicoId: string) => {
     try {
@@ -273,13 +277,52 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Categoria (opcional)</label>
-          <Input
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value)}
-            placeholder="Ex: Química, Hidratação, Corte..."
-          />
-          <p className="text-xs text-gray-500 mt-1">Subcategoria dentro do grupo (opcional)</p>
+          <label className="block text-sm font-medium mb-1">Termos de Busca</label>
+          <div className="flex flex-wrap gap-1.5 p-2 border border-gray-300 rounded-md min-h-[42px] focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+            {termosBusca.map((termo, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
+              >
+                {termo}
+                <button
+                  type="button"
+                  onClick={() => setTermosBusca(termosBusca.filter((_, j) => j !== i))}
+                  className="hover:text-blue-600 focus:outline-none"
+                  aria-label={`Remover ${termo}`}
+                >
+                  <XIcon className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              value={termoInput}
+              onChange={(e) => setTermoInput(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ',') && termoInput.trim()) {
+                  e.preventDefault();
+                  const novo = termoInput.trim().replace(/,$/, '');
+                  if (novo && !termosBusca.includes(novo)) {
+                    setTermosBusca([...termosBusca, novo]);
+                  }
+                  setTermoInput('');
+                } else if (e.key === 'Backspace' && !termoInput && termosBusca.length > 0) {
+                  setTermosBusca(termosBusca.slice(0, -1));
+                }
+              }}
+              onBlur={() => {
+                const novo = termoInput.trim().replace(/,$/, '');
+                if (novo && !termosBusca.includes(novo)) {
+                  setTermosBusca([...termosBusca, novo]);
+                  setTermoInput('');
+                }
+              }}
+              placeholder={termosBusca.length === 0 ? 'Ex: clarear, retocar raiz, luzes...' : ''}
+              className="flex-1 min-w-[120px] outline-none text-sm bg-transparent"
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Digite e pressione Enter ou vírgula para adicionar. Facilita a busca pelo serviço.</p>
         </div>
 
         <div>
