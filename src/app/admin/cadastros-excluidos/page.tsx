@@ -67,24 +67,45 @@ export default function CadastrosExcluidosPage() {
   const recuperarCadastro = async (cadastro: CadastroExcluido) => {
     if (!confirm(`Deseja recuperar este ${cadastro.tipo_cadastro}?`)) return;
 
-    try {
-      // Aqui você implementaria a lógica de recuperação
-      // Inserir de volta na tabela original
-      console.log('Recuperar cadastro:', cadastro);
+    const TABELA_POR_TIPO: Record<string, string> = {
+      cliente: 'clientes',
+      produto: 'produtos',
+      servico: 'servicos',
+      agendamento: 'agendamentos',
+      profissional: 'profissionais',
+    };
 
-      // Remover da tabela de excluídos
-      const { error } = await supabase
+    const tabela = TABELA_POR_TIPO[cadastro.tipo_cadastro];
+    if (!tabela) {
+      alert(`Tipo "${cadastro.tipo_cadastro}" não tem recuperação automática implementada.`);
+      return;
+    }
+
+    try {
+      // Limpa campos que não pertencem à tabela de destino
+      const dadosParaInserir = { ...cadastro.dados_originais };
+      delete dadosParaInserir.deleted_at;
+
+      // Upsert: se o ID já existir na tabela, atualiza; senão, insere
+      const { error: insertError } = await supabase
+        .from(tabela)
+        .upsert(dadosParaInserir, { onConflict: 'id' });
+
+      if (insertError) throw insertError;
+
+      // Só remove de cadastros_excluidos após reinserção bem-sucedida
+      const { error: deleteError } = await supabase
         .from('cadastros_excluidos')
         .delete()
         .eq('id', cadastro.id);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
 
       alert('Cadastro recuperado com sucesso!');
       loadCadastrosExcluidos();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao recuperar cadastro:', error);
-      alert('Erro ao recuperar cadastro');
+      alert(`Erro ao recuperar cadastro: ${error.message || 'Erro desconhecido'}`);
     }
   };
 

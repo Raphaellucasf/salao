@@ -1,14 +1,15 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 import { Settings, CreditCard, Tag, Store, Plus, Pencil, Trash2, Search, DollarSign, Calendar, Users } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import FormaPagamentoModal from '@/components/modals/FormaPagamentoModal';
 import PromocaoModal from '@/components/modals/PromocaoModal';
 
-export default function ConfiguracoesPage() {
+function ConfiguracoesPage() {
   const [activeTab, setActiveTab] = useState<'geral' | 'pagamentos' | 'promocoes'>('geral');
   const [loading, setLoading] = useState(true);
   
@@ -639,3 +640,5 @@ export default function ConfiguracoesPage() {
     </div>
   );
 }
+
+export default withAdminOnly(ConfiguracoesPage);

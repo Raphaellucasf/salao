@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 
 import { useState, useEffect } from 'react';
-import { BarChart3, DollarSign, Users, ShoppingBag, Scissors, TrendingUp, Calendar, Download, FileText, Filter, FileDown } from 'lucide-react';
+import { BarChart3, DollarSign, Users, ShoppingBag, Scissors, TrendingUp, Calendar, Download, FileText, Filter, FileDown, AlertTriangle } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 // XLSX e jsPDF são importados dinamicamente apenas quando o usuário clicar em exportar
@@ -25,13 +26,14 @@ type TipoRelatorio =
   | 'Relatório de Profissionais'
   | 'Relatório de Agenda';
 
-export default function RelatoriosPage() {
+function RelatoriosPage() {
   const [periodo, setPeriodo] = useState('mes');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [mostrarFiltroPersonalizado, setMostrarFiltroPersonalizado] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [dadosCache, setDadosCache] = useState<Record<string, any[]>>({});
+  const [origemDadosCache, setOrigemDadosCache] = useState<Record<string, 'real' | 'exemplo'>>({});
 
   // Atualiza as datas quando o período muda
   useEffect(() => {
@@ -87,6 +89,9 @@ export default function RelatoriosPage() {
       if (!dados || dados.length === 0) {
         console.log(`Nenhum dado real encontrado para ${titulo}, usando dados de exemplo`);
         dados = dadosExemplo[titulo] || [];
+        setOrigemDadosCache((prev) => ({ ...prev, [titulo]: 'exemplo' }));
+      } else {
+        setOrigemDadosCache((prev) => ({ ...prev, [titulo]: 'real' }));
       }
 
       // Armazena no cache
@@ -95,6 +100,7 @@ export default function RelatoriosPage() {
       return dados;
     } catch (error) {
       console.error(`Erro ao buscar ${titulo}:`, error);
+      setOrigemDadosCache((prev) => ({ ...prev, [titulo]: 'exemplo' }));
       // Em caso de erro, retorna dados de exemplo
       return dadosExemplo[titulo] || [];
     } finally {
@@ -105,6 +111,7 @@ export default function RelatoriosPage() {
   // Limpa o cache quando o período muda
   useEffect(() => {
     setDadosCache({});
+    setOrigemDadosCache({});
   }, [dataInicio, dataFim]);
 
   // Dados de exemplo para cada relatório (fallback se não houver dados reais)
@@ -466,6 +473,20 @@ export default function RelatoriosPage() {
         })}
       </div>
 
+      {/* Banner: dados de demonstração */}
+      {Object.values(origemDadosCache).some(o => o === 'exemplo') && (
+        <div className="bg-yellow-50 border border-yellow-400 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="font-semibold text-yellow-900">Atenção: dados de demonstração ativos</p>
+            <p className="text-sm text-yellow-800 mt-1">
+              Um ou mais relatórios estão exibindo <strong>dados fictícios</strong> porque não há registros reais para o período selecionado.
+              Os relatórios marcados com <span className="font-bold">DEMO</span> usam dados de exemplo — os números não refletem o movimento real do salão.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Relatórios Disponíveis */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Relatórios Disponíveis</h2>
@@ -482,7 +503,12 @@ export default function RelatoriosPage() {
                     <Icon size={24} className="text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 mb-2">{relatorio.titulo}</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-gray-900">{relatorio.titulo}</h3>
+                      {origemDadosCache[relatorio.titulo as TipoRelatorio] === 'exemplo' && (
+                        <span className="text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-300 px-2 py-0.5 rounded">DEMO</span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600 mb-4">{relatorio.descricao}</p>
                     <div className="flex gap-2 flex-wrap">
                       <Button 
@@ -577,3 +603,5 @@ export default function RelatoriosPage() {
     </div>
   );
 }
+
+export default withAdminOnly(RelatoriosPage);

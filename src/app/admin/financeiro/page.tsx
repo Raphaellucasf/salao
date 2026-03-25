@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, Download, Filter, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
@@ -7,8 +7,9 @@ import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import TransacaoModal from '@/components/modals/TransacaoModal';
 import { supabase } from '@/lib/supabase';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 
-export default function FinanceiroPage() {
+function FinanceiroPage() {
   const [periodo, setPeriodo] = useState<'hoje' | 'semana' | 'mes'>('mes');
   const [transacoes, setTransacoes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -271,3 +272,5 @@ export default function FinanceiroPage() {
     </div>
   );
 }
+
+export default withAdminOnly(FinanceiroPage);

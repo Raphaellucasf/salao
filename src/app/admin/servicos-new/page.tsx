@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { 
@@ -11,8 +11,9 @@ import { Badge } from '@/components/ui/Badge';
 import GrupoServicoModal from '@/components/modals/GrupoServicoModal';
 import PacoteServicoModal from '@/components/modals/PacoteServicoModal';
 import { supabase } from '@/lib/supabase';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 
-export default function ServicosNewPage() {
+function ServicosNewPage() {
   const [activeView, setActiveView] = useState<'servicos' | 'pacotes' | 'grupos'>('servicos');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGrupo, setFilterGrupo] = useState<string>('todos');
@@ -547,3 +548,5 @@ export default function ServicosNewPage() {
     </div>
   );
 }
+
+export default withAdminOnly(ServicosNewPage);

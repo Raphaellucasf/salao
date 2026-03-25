@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 interface Appointment {
   id: string;
@@ -35,6 +36,14 @@ interface Activity {
   type: 'success' | 'info' | 'warning' | 'error';
 }
 
+interface ComissaoProfissional {
+  profissional_id: string;
+  nome: string;
+  atendimentos: number;
+  faturamento: number;
+  comissao: number;
+}
+
 export default function AdminDashboard() {
   const { user } = useAuth();
 
@@ -45,9 +54,43 @@ export default function AdminDashboard() {
   const [novosClientesHoje, setNovosClientesHoje] = useState(0);
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [todayActivity, setTodayActivity] = useState<Activity[]>([]);
+  const [comissoesMes, setComissoesMes] = useState<ComissaoProfissional[]>([]);
 
   useEffect(() => {
     loadDashboard();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'agendamentos' },
+        (payload: any) => {
+          const ag = payload.new;
+          toast.info(
+            `📅 Novo agendamento: ${ag.cliente_nome || 'Cliente'} — ${ag.data_agendamento || ''} ${ag.hora_inicio?.slice(0, 5) || ''}`,
+            { duration: 6000 }
+          );
+          loadDashboard();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'estoque_alertas' },
+        (payload: any) => {
+          const alerta = payload.new;
+          toast.warning(
+            `⚠️ Estoque: ${alerta.mensagem || 'Alerta de estoque'}`,
+            { duration: 8000 }
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadDashboard = async () => {
@@ -56,12 +99,16 @@ export default function AdminDashboard() {
       const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
       const agoraHora = new Date().toTimeString().slice(0, 8);
 
+      // Uma única onda de queries paralelas
       const [
         { data: agendamentosData },
         { data: clientesData },
         { data: proximosData },
         { data: concluidosHojeData },
         { data: novosAgendamentosData },
+        { data: fatMesData },
+        { data: agsMes },
+        { data: profissionaisData },
       ] = await Promise.all([
         // Todos agendamentos de hoje
         supabase
@@ -101,31 +148,40 @@ export default function AdminDashboard() {
           .eq('data_agendamento', hoje)
           .order('created_at', { ascending: false })
           .limit(3),
+
+        // Faturamento do mês
+        supabase
+          .from('agendamentos')
+          .select('valor_total')
+          .eq('status', 'concluido')
+          .gte('data_agendamento', inicioMes),
+
+        // Agendamentos do mês por profissional (comissões)
+        supabase
+          .from('agendamentos')
+          .select('profissional_id, valor_total')
+          .eq('status', 'concluido')
+          .gte('data_agendamento', inicioMes),
+
+        // Lista de profissionais ativos
+        supabase
+          .from('profissionais')
+          .select('id, nome')
+          .eq('ativo', true),
       ]);
 
       // Stats
       const lista = agendamentosData || [];
       setAgendamentosHoje(lista.length);
 
+      setNovosClientesHoje((clientesData || []).length);
+      setUpcomingAppointments(proximosData || []);
+
+      // Faturamento hoje (de agendamentos)
       const fatHoje = lista
         .filter((a: any) => a.status === 'concluido' && a.valor_total)
         .reduce((acc: number, a: any) => acc + parseFloat(a.valor_total || 0), 0);
       setFaturamentoHoje(fatHoje);
-
-      // Faturamento do mês
-      const { data: fatMesData } = await supabase
-        .from('agendamentos')
-        .select('valor_total')
-        .eq('status', 'concluido')
-        .gte('data_agendamento', inicioMes);
-
-      const fatMes = (fatMesData || []).reduce(
-        (acc: number, a: any) => acc + parseFloat(a.valor_total || 0), 0
-      );
-      setFaturamentoMes(fatMes);
-
-      setNovosClientesHoje((clientesData || []).length);
-      setUpcomingAppointments(proximosData || []);
 
       // Montar atividades reais
       const activities: Activity[] = [];
@@ -157,6 +213,38 @@ export default function AdminDashboard() {
       activities.sort((a, b) => b.time.localeCompare(a.time));
       setTodayActivity(activities.slice(0, 6));
 
+      // Faturamento do mês (já carregado em paralelo)
+      const fatMes = (fatMesData || []).reduce(
+        (acc: number, a: any) => acc + parseFloat(a.valor_total || 0), 0
+      );
+      setFaturamentoMes(fatMes);
+
+      // Comissões por profissional no mês (já carregadas em paralelo)
+
+      const nomesMap: Record<string, string> = {};
+      (profissionaisData || []).forEach((p: any) => { nomesMap[p.id] = p.nome; });
+
+      const comissoesMap: Record<string, { atendimentos: number; faturamento: number }> = {};
+      (agsMes || []).forEach((ag: any) => {
+        if (!ag.profissional_id) return;
+        if (!comissoesMap[ag.profissional_id]) {
+          comissoesMap[ag.profissional_id] = { atendimentos: 0, faturamento: 0 };
+        }
+        comissoesMap[ag.profissional_id].atendimentos += 1;
+        comissoesMap[ag.profissional_id].faturamento += parseFloat(ag.valor_total || 0);
+      });
+
+      const ranking = Object.entries(comissoesMap)
+        .map(([id, val]) => ({
+          profissional_id: id,
+          nome: nomesMap[id] || 'Profissional',
+          atendimentos: val.atendimentos,
+          faturamento: val.faturamento,
+          comissao: val.faturamento * 0.5,
+        }))
+        .sort((a, b) => b.comissao - a.comissao);
+
+      setComissoesMes(ranking);
     } catch (err) {
       console.error('Erro ao carregar dashboard:', err);
     } finally {
@@ -444,6 +532,34 @@ export default function AdminDashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Comissões por Profissional */}
+      {comissoesMes.length > 0 && (
+        <Card padding="lg">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-neutral-900">Comissões do Mês</h2>
+            <span className="text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded">estimativa 50%</span>
+          </div>
+          <div className="space-y-3">
+            {comissoesMes.map((prof, i) => (
+              <div key={prof.profissional_id} className="flex items-center gap-4">
+                <span className="w-6 text-sm font-bold text-neutral-400">{i + 1}</span>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  {prof.nome.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-neutral-900 truncate">{prof.nome}</p>
+                  <p className="text-xs text-neutral-500">{prof.atendimentos} atendimento{prof.atendimentos !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-green-600">{formatCurrency(prof.comissao)}</p>
+                  <p className="text-xs text-neutral-400">{formatCurrency(prof.faturamento)} fat.</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

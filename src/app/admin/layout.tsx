@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +8,7 @@ import AdminSidebarNew from '@/components/layout/AdminSidebarNew';
 import QuickActions from '@/components/layout/QuickActions';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import dynamic from 'next/dynamic';
+import { Toaster } from 'sonner';
 const MensagemAvisoModal = dynamic(() => import('@/components/modals/MensagemAvisoModal'), { ssr: false });
 const BuscarAgendaModal = dynamic(() => import('@/components/modals/BuscarAgendaModal'), { ssr: false });
 
@@ -56,13 +57,13 @@ export default function AdminLayout({
     },
   ]);
 
-  // PROTEÇÃO DESATIVADA TEMPORARIAMENTE PARA TESTES
+  // Protecao: permite admin e professional (usuarios do sistema)
   return (
-    <>
+    <ProtectedRoute allowedRoles={['admin', 'professional']}>
       <div className="min-h-screen bg-neutral-50">
         {/* Sidebar */}
         <AdminSidebarNew />
-        
+
         {/* Main Content */}
         <main className="ml-64 transition-all duration-300">
           <div className="min-h-screen">
@@ -74,6 +75,9 @@ export default function AdminLayout({
         <QuickActions />
       </div>
 
+      {/* Toast notifications (realtime) */}
+      <Toaster position="top-right" richColors closeButton />
+
       {/* Modais Globais */}
       <MensagemAvisoModal
         isOpen={mensagemModalOpen}
@@ -84,22 +88,6 @@ export default function AdminLayout({
         isOpen={buscarAgendaModalOpen}
         onClose={() => setBuscarAgendaModalOpen(false)}
       />
-    </>
-  );
-  
-  /* CÓDIGO ORIGINAL COM PROTEÇÃO
-  return (
-    <ProtectedRoute allowedRoles={['admin']}>
-      <div className="min-h-screen bg-neutral-50">
-        <AdminSidebarNew />
-        <main className="ml-64 transition-all duration-300">
-          <div className="min-h-screen">
-            {children}
-          </div>
-        </main>
-        <QuickActions />
-      </div>
     </ProtectedRoute>
   );
-  */
 }

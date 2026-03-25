@@ -16,7 +16,8 @@ import {
   ChevronRight,
   BarChart3,
   ShoppingBag,
-  Shield
+  Shield,
+  ClipboardList
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
@@ -29,17 +30,18 @@ interface SidebarItem {
 }
 
 const sidebarItems: SidebarItem[] = [
-  { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-  { name: 'Agenda', href: '/admin/agenda', icon: Calendar },
-  { name: 'Clientes', href: '/admin/clientes', icon: Users },
-  { name: 'Profissionais', href: '/admin/profissionais', icon: Scissors },
-  { name: 'Produtos', href: '/admin/produtos', icon: ShoppingBag },
-  { name: 'Serviços', href: '/admin/servicos-new', icon: Scissors },
-  { name: 'Financeiro', href: '/admin/financeiro', icon: DollarSign },
-  { name: 'Estoque', href: '/admin/estoque', icon: Package },
-  { name: 'Relatórios', href: '/admin/relatorios', icon: BarChart3 },
-  { name: 'Usuários', href: '/admin/usuarios', icon: Shield },
-  { name: 'Configurações', href: '/admin/configuracoes', icon: Settings },
+  { name: 'Dashboard',     href: '/admin/dashboard',    icon: LayoutDashboard },
+  { name: 'Agenda',        href: '/admin/agenda',        icon: Calendar },
+  { name: 'Clientes',      href: '/admin/clientes',      icon: Users },
+  { name: 'Comandas',      href: '/admin/comandas',      icon: ClipboardList },
+  { name: 'Profissionais', href: '/admin/profissionais', icon: Scissors,    adminOnly: true },
+  { name: 'Produtos',      href: '/admin/produtos',      icon: ShoppingBag, adminOnly: true },
+  { name: 'Serviços',      href: '/admin/servicos-new',  icon: Scissors,    adminOnly: true },
+  { name: 'Financeiro',    href: '/admin/financeiro',    icon: DollarSign,  adminOnly: true },
+  { name: 'Estoque',       href: '/admin/estoque',       icon: Package,     adminOnly: true },
+  { name: 'Relatórios',    href: '/admin/relatorios',    icon: BarChart3,   adminOnly: true },
+  { name: 'Usuários',      href: '/admin/usuarios',      icon: Shield,      adminOnly: true },
+  { name: 'Configurações', href: '/admin/configuracoes', icon: Settings,    adminOnly: true },
 ];
 
 export default function AdminSidebarNew() {
@@ -97,7 +99,7 @@ export default function AdminSidebarNew() {
                 {user?.full_name || 'Admin Lucas'}
               </p>
               <p className="text-xs text-neutral-500 truncate">
-                {isAdmin ? 'Administrador' : 'Profissional'}
+                {isAdmin ? 'Administrador' : 'Usuário'}
               </p>
             </div>
           </div>

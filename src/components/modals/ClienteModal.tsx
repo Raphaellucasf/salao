@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
+import { useFormCache } from '@/hooks/useFormCache';
 
 interface Cliente {
   id?: number;
@@ -23,6 +24,7 @@ interface ClienteModalProps {
 }
 
 export default function ClienteModal({ isOpen, onClose, cliente, onSave }: ClienteModalProps) {
+  const formCache = useFormCache<Cliente>('cliente_novo');
   const [formData, setFormData] = useState<Cliente>({
     nome: '',
     telefone: '',
@@ -36,10 +38,16 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave }: Clien
     if (cliente) {
       setFormData(cliente);
     } else {
-      setFormData({ nome: '', telefone: '', email: '', status: 'ativo' });
+      const cached = formCache.load();
+      setFormData(cached ?? { nome: '', telefone: '', email: '', status: 'ativo' });
     }
     setError('');
   }, [cliente, isOpen]);
+
+  // Persiste no cache enquanto preenche (apenas novo cadastro)
+  useEffect(() => {
+    if (!cliente?.id && isOpen) formCache.save(formData);
+  }, [formData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +83,7 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave }: Clien
       }
 
       onSave();
+      formCache.clear();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar cliente');

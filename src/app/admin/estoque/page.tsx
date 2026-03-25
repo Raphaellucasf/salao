@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { Package, AlertTriangle, Plus, Search, TrendingUp, ArrowUpRight, ArrowDownRight, Edit, BarChart3, RotateCcw } from 'lucide-react';
@@ -8,9 +8,11 @@ import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import ProdutoModal from '@/components/modals/ProdutoModal';
 import DesfazerVendaModal from '@/components/modals/DesfazerVendaModal';
+import MovimentacaoEstoqueModal from '@/components/modals/MovimentacaoEstoqueModal';
 import { supabase } from '@/lib/supabase';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 
-export default function EstoquePage() {
+function EstoquePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategoria, setFilterCategoria] = useState<'todos' | 'uso_interno'>('todos');
   const [produtos, setProdutos] = useState<any[]>([]);
@@ -18,6 +20,10 @@ export default function EstoquePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [desfazerVendaModalOpen, setDesfazerVendaModalOpen] = useState(false);
   const [selectedProduto, setSelectedProduto] = useState<any>(null);
+  const [movimentacoes, setMovimentacoes] = useState<any[]>([]);
+  const [movimentacaoModalOpen, setMovimentacaoModalOpen] = useState(false);
+  const [selectedProdutoMov, setSelectedProdutoMov] = useState<any>(null);
+  const [showOnlyAlerts, setShowOnlyAlerts] = useState(false);
 
   const loadProdutos = async () => {
     setLoading(true);
@@ -29,7 +35,12 @@ export default function EstoquePage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setProdutos(data || []);
+      // Normaliza campos que podem ter nomes diferentes dependendo do schema aplicado
+      setProdutos((data || []).map(p => ({
+        ...p,
+        minimo: p.quantidade_minima ?? p.minimo ?? 0,
+        unidade: p.unidade_medida ?? p.unidade ?? 'UN',
+      })));
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
     } finally {
@@ -37,8 +48,28 @@ export default function EstoquePage() {
     }
   };
 
+  const loadMovimentacoes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('estoque_movimentacoes')
+        .select('id, tipo, quantidade, motivo, created_at, produtos!produto_id(nome, unidade_medida)')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        // Tabela ainda não criada no banco — ignora silenciosamente
+        if (error.message?.includes('schema cache') || error.code === '42P01') return;
+        throw error;
+      }
+      setMovimentacoes(data || []);
+    } catch (err: any) {
+      console.error('Erro ao carregar movimentações:', err?.message || err?.code || JSON.stringify(err));
+    }
+  };
+
   useEffect(() => {
     loadProdutos();
+    loadMovimentacoes();
   }, []);
 
   const handleEdit = (produto: any) => {
@@ -51,24 +82,23 @@ export default function EstoquePage() {
     setModalOpen(true);
   };
 
+  const valorEstoque = produtos.reduce((acc, p) => acc + ((p.quantidade || 0) * (p.preco_custo || 0)), 0);
+  const alertaCount = produtos.filter(p => p.quantidade <= p.minimo).length;
+  const today = new Date().toDateString();
+  const movsHoje = movimentacoes.filter(m => new Date(m.created_at).toDateString() === today).length;
+
   const stats = [
     { label: 'Total Produtos', value: produtos.length.toString(), icon: Package, color: 'bg-primary-500' },
-    { label: 'Valor em Estoque', value: 'R$ 48.5k', icon: TrendingUp, color: 'bg-green-500' },
-    { label: 'Alertas', value: produtos.filter(p => p.quantidade <= p.minimo).length.toString(), icon: AlertTriangle, color: 'bg-yellow-500' },
-    { label: 'Movimentações Hoje', value: '24', icon: BarChart3, color: 'bg-blue-500' },
-  ];
-
-  const movimentacoes = [
-    { tipo: 'entrada', descricao: 'Compra - Fornecedor ABC', quantidade: 50, produto: 'Shampoo Loreal', data: '20/01/2026 09:30' },
-    { tipo: 'saida', descricao: 'Venda - Maria Silva', quantidade: 1, produto: 'Máscara Hidratação', data: '20/01/2026 14:20' },
-    { tipo: 'uso', descricao: 'Uso Interno - Atendimento', quantidade: 0.5, produto: 'Botox Capilar Premium', data: '20/01/2026 15:45' },
-    { tipo: 'saida', descricao: 'Venda - Paula Costa', quantidade: 2, produto: 'Shampoo Loreal', data: '19/01/2026 16:30' },
+    { label: 'Valor em Estoque', value: `R$ ${valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: TrendingUp, color: 'bg-green-500' },
+    { label: 'Alertas', value: alertaCount.toString(), icon: AlertTriangle, color: 'bg-yellow-500' },
+    { label: 'Movimentações Hoje', value: movsHoje.toString(), icon: BarChart3, color: 'bg-blue-500' },
   ];
 
   const filteredProdutos = produtos.filter(produto => {
     const matchesSearch = produto.nome.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategoria = filterCategoria === 'todos' || produto.tipo === filterCategoria;
-    return matchesSearch && matchesCategoria;
+    const matchesAlert = !showOnlyAlerts || produto.quantidade <= produto.minimo;
+    return matchesSearch && matchesCategoria && matchesAlert;
   });
 
   return (
@@ -85,6 +115,15 @@ export default function EstoquePage() {
         onClose={() => setDesfazerVendaModalOpen(false)}
         onSave={loadProdutos}
       />
+
+      {selectedProdutoMov && (
+        <MovimentacaoEstoqueModal
+          isOpen={movimentacaoModalOpen}
+          onClose={() => { setMovimentacaoModalOpen(false); setSelectedProdutoMov(null); }}
+          produto={selectedProdutoMov}
+          onSave={() => { loadProdutos(); loadMovimentacoes(); }}
+        />
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -137,7 +176,10 @@ export default function EstoquePage() {
                 {produtos.filter(p => p.quantidade <= p.minimo).length} produtos estão abaixo do estoque mínimo. Considere fazer um pedido de reposição.
               </p>
             </div>
-            <Button variant="secondary" size="sm">Ver produtos</Button>
+            <Button variant="secondary" size="sm" onClick={() => {
+                setShowOnlyAlerts(true);
+                document.getElementById('produtos-table')?.scrollIntoView({ behavior: 'smooth' });
+              }}>Ver produtos</Button>
           </div>
         </Card>
       )}
@@ -175,7 +217,17 @@ export default function EstoquePage() {
       {/* Produtos List */}
       <Card padding="none">
         <CardHeader className="p-6 border-b border-neutral-100">
-          <CardTitle>Produtos em Estoque ({filteredProdutos.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle id="produtos-table">Produtos em Estoque ({filteredProdutos.length})</CardTitle>
+            {showOnlyAlerts && (
+              <button
+                onClick={() => setShowOnlyAlerts(false)}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                × Limpar filtro (estoque baixo)
+              </button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -236,10 +288,18 @@ export default function EstoquePage() {
                         >
                           <Edit className="w-4 h-4 text-neutral-600" />
                         </button>
-                        <button className="p-2 hover:bg-primary-50 rounded-lg transition-colors">
+                        <button
+                          className="p-2 hover:bg-primary-50 rounded-lg transition-colors"
+                          title="Entrada de estoque"
+                          onClick={() => { setSelectedProdutoMov(produto); setMovimentacaoModalOpen(true); }}
+                        >
                           <ArrowUpRight className="w-4 h-4 text-primary-600" />
                         </button>
-                        <button className="p-2 hover:bg-accent-50 rounded-lg transition-colors">
+                        <button
+                          className="p-2 hover:bg-accent-50 rounded-lg transition-colors"
+                          title="Saída de estoque"
+                          onClick={() => { setSelectedProdutoMov(produto); setMovimentacaoModalOpen(true); }}
+                        >
                           <ArrowDownRight className="w-4 h-4 text-accent-600" />
                         </button>
                       </div>
@@ -262,37 +322,55 @@ export default function EstoquePage() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y divide-neutral-100">
-            {movimentacoes.map((mov, index) => (
-              <div key={index} className="p-6 hover:bg-neutral-50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      mov.tipo === 'entrada' ? 'bg-green-100' :
-                      mov.tipo === 'saida' ? 'bg-red-100' : 'bg-blue-100'
-                    }`}>
-                      {mov.tipo === 'entrada' ? (
-                        <ArrowUpRight className={`w-5 h-5 ${mov.tipo === 'entrada' ? 'text-green-600' : ''}`} />
-                      ) : (
-                        <ArrowDownRight className={`w-5 h-5 ${mov.tipo === 'saida' ? 'text-red-600' : 'text-blue-600'}`} />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-neutral-900">{mov.produto}</p>
-                      <p className="text-sm text-neutral-600">{mov.descricao}</p>
-                      <p className="text-xs text-neutral-500 mt-1">{mov.data}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <Badge variant={mov.tipo === 'entrada' ? 'success' : mov.tipo === 'saida' ? 'error' : 'default'}>
-                      {mov.tipo === 'entrada' ? '+' : '-'}{mov.quantidade}
-                    </Badge>
-                  </div>
-                </div>
+            {movimentacoes.length === 0 ? (
+              <div className="p-8 text-center text-neutral-500">
+                <BarChart3 className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p>Nenhuma movimentação registrada ainda.</p>
               </div>
-            ))}
+            ) : (
+              movimentacoes.map((mov) => {
+                const isEntrada = ['entrada', 'devolucao', 'ajuste_positivo'].includes(mov.tipo);
+                const nomeProduto = (mov.produto as any)?.nome ?? '—';
+                const unidade = (mov.produto as any)?.unidade_medida ?? '';
+                const dataFormatada = new Date(mov.created_at).toLocaleString('pt-BR', {
+                  day: '2-digit', month: '2-digit', year: 'numeric',
+                  hour: '2-digit', minute: '2-digit',
+                });
+                return (
+                  <div key={mov.id} className="p-6 hover:bg-neutral-50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          isEntrada ? 'bg-green-100' :
+                          mov.tipo === 'saida' || mov.tipo === 'venda' ? 'bg-red-100' : 'bg-blue-100'
+                        }`}>
+                          {isEntrada ? (
+                            <ArrowUpRight className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <ArrowDownRight className={`w-5 h-5 ${mov.tipo === 'saida' || mov.tipo === 'venda' ? 'text-red-600' : 'text-blue-600'}`} />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-neutral-900">{nomeProduto}</p>
+                          <p className="text-sm text-neutral-600 capitalize">{mov.tipo.replace('_', ' ')}{mov.motivo ? ` — ${mov.motivo}` : ''}</p>
+                          <p className="text-xs text-neutral-500 mt-1">{dataFormatada}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={isEntrada ? 'success' : mov.tipo === 'saida' || mov.tipo === 'venda' ? 'error' : 'default'}>
+                          {isEntrada ? '+' : '-'}{mov.quantidade} {unidade}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+export default withAdminOnly(EstoquePage);

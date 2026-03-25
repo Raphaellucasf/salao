@@ -134,37 +134,69 @@ export default function UsuarioModal({ isOpen, onClose, onSuccess, usuario }: Us
     setLoading(true);
 
     try {
-      const usuarioData = {
-        nome,
-        email,
-        telefone,
-        cpf,
-        data_nascimento: dataNascimento || null,
-        role_id: roleId,
-        permissoes_customizadas: permissoesCustomizadas,
-        ativo,
-        tema,
-        notificacoes_email: notificacoesEmail,
-        notificacoes_push: notificacoesPush,
-        notificacoes_sistema: notificacoesSistema,
-        senha_temporaria: senhaTemporaria,
-        observacoes,
-        ...(senha && { senha_hash: `$2a$10$${senha}` }), // Hash simplificado para demo
-      };
+      // Encontra a role selecionada para determinar nível de acesso
+      const selectedRole = roles.find(r => r.id === roleId);
+      const roleNivel = selectedRole?.nivel ?? 0;
+      const roleName = selectedRole?.nome ?? '';
 
       if (usuario) {
+        // EDITAR usuário existente
+        const usuarioData = {
+          nome,
+          email,
+          telefone,
+          cpf,
+          data_nascimento: dataNascimento || null,
+          role_id: roleId,
+          permissoes_customizadas: permissoesCustomizadas,
+          ativo,
+          tema,
+          notificacoes_email: notificacoesEmail,
+          notificacoes_push: notificacoesPush,
+          notificacoes_sistema: notificacoesSistema,
+          senha_temporaria: senhaTemporaria,
+          observacoes,
+          ...(senha && { senha_hash: `$2a$10$${senha}` }),
+        };
+
         const { error } = await supabase
           .from('usuarios')
           .update(usuarioData)
           .eq('id', usuario.id);
 
         if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('usuarios')
-          .insert([{ ...usuarioData, primeiro_acesso: true }]);
 
-        if (error) throw error;
+        // Se tem auth_id e role mudou, sincroniza perm no Supabase Auth
+        if (usuario.auth_id && roleId !== usuario.role_id) {
+          await fetch('/api/admin/update-user-role', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ authId: usuario.auth_id, roleName, roleNivel }),
+          });
+        }
+      } else {
+        // CRIAR novo usuário via API route (cria auth + users + usuarios)
+        const res = await fetch('/api/admin/create-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome,
+            email,
+            senha,
+            telefone,
+            cpf,
+            data_nascimento: dataNascimento || null,
+            role_id: roleId,
+            roleName,
+            roleNivel,
+            ativo,
+            observacoes,
+            senha_temporaria: senhaTemporaria,
+          }),
+        });
+
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Erro ao criar usuário');
       }
 
       onSuccess();

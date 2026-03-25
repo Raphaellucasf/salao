@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { Plus, Search, Star, TrendingUp, DollarSign, Calendar, Award, Edit, MoreVertical } from 'lucide-react';
@@ -8,8 +8,9 @@ import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import ProfissionalModal from '@/components/modals/ProfissionalModal';
 import { supabase } from '@/lib/supabase';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 
-export default function ProfissionaisPage() {
+function ProfissionaisPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,3 +236,5 @@ export default function ProfissionaisPage() {
     </div>
   );
 }
+
+export default withAdminOnly(ProfissionaisPage);

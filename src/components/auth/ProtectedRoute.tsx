@@ -23,7 +23,7 @@ export default function ProtectedRoute({
         if (role === 'admin') {
           router.push('/admin');
         } else if (role === 'professional') {
-          router.push('/profissionais');
+          router.push('/admin/agenda');
         } else {
           router.push('/');
         }

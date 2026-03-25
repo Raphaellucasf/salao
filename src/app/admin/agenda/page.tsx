@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card } from '@/components/ui';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
 
@@ -12,6 +12,7 @@ const END_HOUR = 21;
 const PIXELS_PER_MINUTE = 2;
 const ROW_HEIGHT = 15 * PIXELS_PER_MINUTE;
 const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MINUTE;
+const GRID_OFFSET = 12; // espaço acima do primeiro slot para o rótulo 08:00 não ficar cortado
 
 interface Appointment {
   id: string;
@@ -63,6 +64,7 @@ export default function AgendaPage() {
   // Estado para o drawer de visualização da comanda
   const [comandaDrawerOpen, setComandaDrawerOpen] = useState(false);
   const [selectedComandaId, setSelectedComandaId] = useState<number | undefined>(undefined);
+  const [iniciandoAtendimento, setIniciandoAtendimento] = useState<string | null>(null);
 
   // Carregar profissionais
   useEffect(() => {
@@ -97,6 +99,7 @@ export default function AgendaPage() {
     }
   };
 
+  // Carrega appointments do Supabase
   const loadAppointments = async () => {
     try {
       setLoading(true);
@@ -240,6 +243,63 @@ export default function AgendaPage() {
     }
   };
 
+  // Cria uma comanda vinculada ao agendamento e abre o drawer
+  const criarComandaFromAgendamento = async (apt: Appointment) => {
+    const agendamentoDbId = apt.agendamento_id || apt.id;
+    setIniciandoAtendimento(apt.id);
+    try {
+      // 1. Buscar dados do agendamento (cliente_id)
+      const { data: ag, error: agError } = await supabase
+        .from('agendamentos')
+        .select('id, cliente_id, cliente_nome, profissional_id')
+        .eq('id', agendamentoDbId)
+        .single();
+      if (agError) throw agError;
+
+      // 2. Criar a comanda vinculada
+      const { data: novaComanda, error: cmdError } = await supabase
+        .from('comandas')
+        .insert([{
+          numero_comanda: 0,
+          cliente_id: ag?.cliente_id || null,
+          cliente_nome: ag?.cliente_nome || apt.client,
+          profissional_id: apt.professionalId || ag?.profissional_id || null,
+          data_agendamento: selectedDate.toISOString().split('T')[0],
+          hora_inicio: apt.startTime,
+          status: 'aberta',
+          total: 0,
+          observacoes: `Originada da agenda em ${selectedDate.toLocaleDateString('pt-BR')}`,
+        }])
+        .select()
+        .single();
+      if (cmdError) throw cmdError;
+
+      // 3. Vincular comanda ao agendamento e mover status para em_andamento
+      const { error: updError } = await supabase
+        .from('agendamentos')
+        .update({ comanda_id: novaComanda.id, status: 'em_andamento' })
+        .eq('id', agendamentoDbId);
+      if (updError) throw updError;
+
+      // 4. Atualizar estado local (todos os blocos do mesmo agendamento)
+      setAppointments(prev => prev.map(a => {
+        const aId = a.agendamento_id || a.id;
+        if (aId === agendamentoDbId) {
+          return { ...a, comanda_id: novaComanda.id, status: 'confirmed' };
+        }
+        return a;
+      }));
+
+      // 5. Abrir drawer
+      setSelectedComandaId(novaComanda.id);
+      setComandaDrawerOpen(true);
+    } catch (err: any) {
+      alert(`Erro ao iniciar atendimento: ${err.message || 'Erro desconhecido'}`);
+    } finally {
+      setIniciandoAtendimento(null);
+    }
+  };
+
   // Gerar horários (8:00 às 19:00 a cada 30 min) - memoizado  // Gerar horários (a cada 15 min) - memoizado
   const timeSlots = useMemo(() => {
     const slots = [];
@@ -254,7 +314,7 @@ export default function AgendaPage() {
 
   const getTopPosition = useCallback((time: string) => {
     const [hour, min] = time.split(':').map(Number);
-    return ((hour - START_HOUR) * 60 + min) * PIXELS_PER_MINUTE;
+    return ((hour - START_HOUR) * 60 + min) * PIXELS_PER_MINUTE + GRID_OFFSET;
   }, []);
 
   const getInitials = useCallback((text: string) => {
@@ -513,7 +573,7 @@ export default function AgendaPage() {
         </Card>
       ) : (
         <Card padding="none" className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto outline-none" style={{ cursor: 'default', userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>
           <div className="min-w-[1000px]">
             {/* Header com nomes dos profissionais */}
             <div className="grid bg-neutral-900 text-white sticky top-0 z-10" style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)` }}>
@@ -531,15 +591,21 @@ export default function AgendaPage() {
             </div>
 
             {/* Grid de horários e colunas (Substituído para Posicionamento Absoluto) */}
-            <div className="relative bg-white" style={{ height: `${TOTAL_HEIGHT + 12}px`, paddingTop: '12px' }}>
+            <div className="relative bg-white select-none" style={{ height: `${TOTAL_HEIGHT + GRID_OFFSET + ROW_HEIGHT}px`, caretColor: 'transparent' } as React.CSSProperties}>
               
-              {/* Linhas de grade de fundo (horizontal) */}
-              <div className="absolute inset-0 pointer-events-none flex flex-col z-0">
-                {timeSlots.map((time, idx) => (
-                  <div 
-                    key={`bg-line-${time}`} 
-                    className={`w-full border-b ${time.endsWith(':00') ? 'border-neutral-200 bg-neutral-50/40' : 'border-neutral-100'}`}
-                    style={{ height: `${ROW_HEIGHT}px`, boxSizing: 'border-box' }}
+              {/* Linhas de grade de fundo (horizontal) — absolutas para espaçamento coeso */}
+              <div className="absolute inset-0 pointer-events-none z-0">
+                {timeSlots.map((time) => (
+                  <div
+                    key={`bg-line-${time}`}
+                    className={`absolute w-full border-t ${
+                      time.endsWith(':00') ? 'border-neutral-200' : 'border-neutral-100'
+                    }`}
+                    style={{
+                      top: `${getTopPosition(time)}px`,
+                      height: `${ROW_HEIGHT}px`,
+                      ...(time.endsWith(':00') ? { backgroundColor: 'rgba(249,250,251,0.4)' } : {}),
+                    }}
                   />
                 ))}
               </div>
@@ -613,6 +679,8 @@ export default function AgendaPage() {
                               if (apt.comanda_id) {
                                 setSelectedComandaId(apt.comanda_id);
                                 setComandaDrawerOpen(true);
+                              } else if (!apt.eh_auxiliar && !iniciandoAtendimento) {
+                                criarComandaFromAgendamento(apt);
                               }
                             }}
                             className={`absolute left-1 right-1 rounded shadow-sm border overflow-hidden cursor-pointer hover:shadow-md hover:z-30 transition-all duration-200 group ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}`}
@@ -655,6 +723,12 @@ export default function AgendaPage() {
                                       {apt.startTime} ({apt.duration}m)
                                     </span>
                                     {apt.eh_auxiliar && <span className="text-[10px]">🤝</span>}
+                                    {!apt.eh_auxiliar && !apt.comanda_id && (
+                                      <PlayCircle className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Iniciar Atendimento" />
+                                    )}
+                                    {!apt.eh_auxiliar && apt.comanda_id && (
+                                      <span className="text-[8px] text-green-600 opacity-70" title="Comanda aberta">✓</span>
+                                    )}
                                   </div>
                                 </>
                               )}

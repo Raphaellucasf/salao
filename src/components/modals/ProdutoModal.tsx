@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useFormCache } from '@/hooks/useFormCache';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
@@ -32,6 +33,7 @@ const TIPOS_PRODUTO = [
 const UNIDADES_MEDIDA = ['unidade', 'kg', 'g', 'l', 'ml', 'cx', 'pacote', 'par'];
 
 export default function ProdutoModal({ isOpen, onClose, produto, onSave }: ProdutoModalProps) {
+  const formCache = useFormCache<typeof formData>('produto_novo');
   const [activeTab, setActiveTab] = useState('geral');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -93,11 +95,21 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave }: Produ
         observacoes: produto.observacoes || '',
       });
     } else {
-      resetForm();
+      const cached = formCache.load();
+      if (cached) {
+        setFormData(cached);
+      } else {
+        resetForm();
+      }
     }
     setError('');
     setActiveTab('geral');
   }, [produto, isOpen]);
+
+  // Persiste no cache enquanto preenche (apenas novo cadastro)
+  useEffect(() => {
+    if (!produto?.id && isOpen) formCache.save(formData);
+  }, [formData]);
 
   // Auto-calcular margem de lucro
   useEffect(() => {
@@ -176,6 +188,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave }: Produ
 
       onSave();
       onClose();
+      formCache.clear();
       resetForm();
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar produto');

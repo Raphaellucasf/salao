@@ -86,8 +86,18 @@ export default function AniversariantesPage() {
   };
 
   const enviarMensagem = (cliente: Cliente) => {
-    // Abrir modal de mensagem com template de aniversário
-    console.log('Enviar mensagem de aniversário para', cliente.nome);
+    if (!cliente.telefone) {
+      alert(`${cliente.nome} não possui telefone cadastrado.`);
+      return;
+    }
+    // Formata número: remove tudo que não for dígito
+    const numero = cliente.telefone.replace(/\D/g, '');
+    // Adiciona o código do Brasil se não começar com 55
+    const numeroCompleto = numero.startsWith('55') ? numero : `55${numero}`;
+    const mensagem = encodeURIComponent(
+      `🎂 Feliz aniversário, ${cliente.nome}! O time do Otimiza Beauty deseja a você um dia repleto de alegrias! Que tal celebrar com um mimo especial? Agende seu horário 💖`
+    );
+    window.open(`https://wa.me/${numeroCompleto}?text=${mensagem}`, '_blank', 'noopener,noreferrer');
   };
 
   return (

@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 import { Users, Shield, Mail, Phone, Calendar, Search, Plus, Pencil, Trash2, Key } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -26,7 +27,7 @@ interface Usuario {
   created_at: string;
 }
 
-export default function UsuariosPage() {
+function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -413,3 +414,5 @@ export default function UsuariosPage() {
     </div>
   );
 }
+
+export default withAdminOnly(UsuariosPage);

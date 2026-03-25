@@ -17,6 +17,8 @@ interface ComandaViewDrawerProps {
 export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }: ComandaViewDrawerProps) {
   const [loading, setLoading] = useState(false);
   const [comanda, setComanda] = useState<any>(null);
+  const [metodoPagamento, setMetodoPagamento] = useState('dinheiro');
+  const [fechandoComanda, setFechandoComanda] = useState(false);
 
   useEffect(() => {
     if (isOpen && comandaId) {
@@ -167,6 +169,56 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       console.error('❌ Tipo do erro:', typeof err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fecharComanda = async () => {
+    if (!comanda || comanda.status !== 'aberta') return;
+    try {
+      setFechandoComanda(true);
+
+      const { error: cmdError } = await supabase
+        .from('comandas')
+        .update({ status: 'fechada', data_fechamento: new Date().toISOString() })
+        .eq('id', comanda.id);
+
+      if (cmdError) throw cmdError;
+
+      const hoje = new Date().toISOString().split('T')[0];
+      const { error: transError } = await supabase
+        .from('transacoes')
+        .insert([{
+          tipo: 'receita',
+          descricao: `Comanda #${comanda.numero_comanda} — ${comanda.cliente_nome || 'Cliente'}`,
+          categoria: 'Serviços',
+          valor: comanda.total || 0,
+          metodo: metodoPagamento,
+          data: hoje,
+        }]);
+
+      if (transError) throw transError;
+
+      // 3. Baixa automática de estoque para produtos vendidos na comanda
+      const itensProduto = (comanda.comanda_itens || []).filter(
+        (item: any) => item.tipo === 'produto' && item.item_id
+      );
+      for (const item of itensProduto) {
+        await supabase.rpc('registrar_movimentacao_estoque', {
+          p_produto_id: item.item_id,
+          p_tipo: 'venda',
+          p_quantidade: Math.round(item.quantidade || 1),
+          p_valor_unitario: item.valor_unitario || 0,
+          p_motivo: `Comanda #${comanda.numero_comanda}`,
+          p_documento: null,
+          p_usuario_id: null,
+        });
+      }
+
+      await loadComanda();
+    } catch (err) {
+      console.error('Erro ao fechar comanda:', err);
+    } finally {
+      setFechandoComanda(false);
     }
   };
 
@@ -391,23 +443,47 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
               </div>
 
               {/* Ações */}
-              <div className="flex gap-3 pt-4 border-t">
-                {onEdit && comanda.status === 'aberta' && (
+              <div className="flex flex-col gap-3 pt-4 border-t">
+                {comanda.status === 'aberta' && (
+                  <div>
+                    <label className="text-sm font-medium text-neutral-700 mb-1 block">Forma de Pagamento</label>
+                    <select
+                      value={metodoPagamento}
+                      onChange={(e) => setMetodoPagamento(e.target.value)}
+                      className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="dinheiro">Dinheiro</option>
+                      <option value="pix">PIX</option>
+                      <option value="cartao_credito">Cartão de Crédito</option>
+                      <option value="cartao_debito">Cartão de Débito</option>
+                    </select>
+                    <button
+                      onClick={fecharComanda}
+                      disabled={fechandoComanda}
+                      className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors"
+                    >
+                      {fechandoComanda ? 'Fechando...' : '✓ Fechar Comanda'}
+                    </button>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  {onEdit && comanda.status === 'aberta' && (
+                    <Button
+                      onClick={onEdit}
+                      variant="primary"
+                      className="flex-1"
+                    >
+                      Editar Comanda
+                    </Button>
+                  )}
                   <Button
-                    onClick={onEdit}
-                    variant="primary"
+                    onClick={onClose}
+                    variant="secondary"
                     className="flex-1"
                   >
-                    Editar Comanda
+                    Fechar
                   </Button>
-                )}
-                <Button
-                  onClick={onClose}
-                  variant="secondary"
-                  className="flex-1"
-                >
-                  Fechar
-                </Button>
+                </div>
               </div>
             </>
           ) : (

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { 
@@ -14,8 +14,9 @@ import GrupoProdutoModal from '@/components/modals/GrupoProdutoModal';
 import FornecedorModal from '@/components/modals/FornecedorModal';
 import MovimentacaoEstoqueModal from '@/components/modals/MovimentacaoEstoqueModal';
 import { supabase } from '@/lib/supabase';
+import { withAdminOnly } from '@/components/auth/withAdminOnly';
 
-export default function ProdutosPage() {
+function ProdutosPage() {
   const [activeView, setActiveView] = useState<'produtos' | 'grupos' | 'fornecedores'>('produtos');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState<string>('todos');
@@ -619,3 +620,5 @@ export default function ProdutosPage() {
     </div>
   );
 }
+
+export default withAdminOnly(ProdutosPage);

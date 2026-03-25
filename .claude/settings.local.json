@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find 'C:\\\\Users\\\\qbex\\\\Desktop\\\\PROMPTS\\\\Sistema dimas\\\\otimiza-beauty\\\\database' -name *.sql)",
+      "Bash(ls:*)"
+    ]
+  }
+}

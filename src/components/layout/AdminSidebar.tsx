@@ -24,20 +24,18 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
     { href: '/admin/dashboard', icon: Home, label: 'Dashboard', adminOnly: false },
     { href: '/admin/agenda', icon: Calendar, label: 'Agenda', adminOnly: false },
     { href: '/admin/clientes', icon: Users, label: 'Clientes', adminOnly: false },
-    { href: '/admin/profissionais', icon: Receipt, label: 'Profissionais', adminOnly: false },
-    { href: '/admin/produtos', icon: ShoppingBag, label: 'Produtos', adminOnly: false },
-    { href: '/admin/servicos-new', icon: Scissors, label: 'Serviços', adminOnly: false },
-    { href: '/admin/financeiro', icon: DollarSign, label: 'Financeiro', adminOnly: false },
-    { href: '/admin/estoque', icon: Package, label: 'Estoque', adminOnly: false },
-    { href: '/admin/relatorios', icon: BarChart3, label: 'Relatórios', adminOnly: false },
-    { href: '/admin/usuarios', icon: Shield, label: 'Usuários', adminOnly: false },
-    { href: '/admin/configuracoes', icon: Settings, label: 'Configurações', adminOnly: false },
+    { href: '/admin/profissionais', icon: Receipt, label: 'Profissionais', adminOnly: true },
+    { href: '/admin/produtos', icon: ShoppingBag, label: 'Produtos', adminOnly: true },
+    { href: '/admin/servicos-new', icon: Scissors, label: 'Serviços', adminOnly: true },
+    { href: '/admin/financeiro', icon: DollarSign, label: 'Financeiro', adminOnly: true },
+    { href: '/admin/estoque', icon: Package, label: 'Estoque', adminOnly: true },
+    { href: '/admin/relatorios', icon: BarChart3, label: 'Relatórios', adminOnly: true },
+    { href: '/admin/usuarios', icon: Shield, label: 'Usuários', adminOnly: true },
+    { href: '/admin/configuracoes', icon: Settings, label: 'Configurações', adminOnly: true },
   ];
 
-  // REMOVER FILTRO - Mostrar TODOS os menus para TODOS os usuários (desenvolvimento)
-  const visibleMenuItems = menuItems;
-  
-  console.log('🔍 Debug Sidebar:', { role, isAdmin, user, menuCount: visibleMenuItems.length });
+  // Exibe apenas os menus permitidos para o nível de acesso do usuário
+  const visibleMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);
 
   const isActive = (href: string) => {
     if (href === '/admin') {

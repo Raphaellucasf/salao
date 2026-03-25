@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useFormCache } from '@/hooks/useFormCache';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
@@ -15,8 +16,8 @@ interface ProfissionalModalProps {
   onSave: () => void;
 }
 
-// Grupos fixos de profissionais
-const GRUPOS_PROFISSIONAIS = [
+// Lista padrão de grupos (fallback caso não haja dados no banco)
+const GRUPOS_PROFISSIONAIS_DEFAULT = [
   'Aplicação Procedimento',
   'Cabelo',
   'Cabelo Festa',
@@ -38,8 +39,28 @@ const DIAS_SEMANA = [
 ];
 
 export default function ProfissionalModal({ isOpen, onClose, profissional, onSave }: ProfissionalModalProps) {
+  const formCache = useFormCache<typeof formData>('profissional_novo');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [gruposOpcoes, setGruposOpcoes] = useState<string[]>(GRUPOS_PROFISSIONAIS_DEFAULT);
+
+  // Carrega grupos já usados por profissionais cadastrados e mescla com os padrões
+  const loadGrupos = async () => {
+    try {
+      const { data } = await supabase
+        .from('profissionais')
+        .select('grupos')
+        .not('grupos', 'is', null);
+
+      if (data && data.length > 0) {
+        const gruposDoBanco = data.flatMap((p: any) => Array.isArray(p.grupos) ? p.grupos : []);
+        const merged = [...new Set([...GRUPOS_PROFISSIONAIS_DEFAULT, ...gruposDoBanco])].sort();
+        setGruposOpcoes(merged);
+      }
+    } catch {
+      // Mantém o fallback padrão
+    }
+  };
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -75,6 +96,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
 
   useEffect(() => {
     if (isOpen) {
+      loadGrupos();
       if (profissional) {
         setFormData({
           nome: profissional.nome || '',
@@ -117,10 +139,21 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           observacoes: profissional.observacoes || '',
         });
       } else {
-        resetForm();
+        const cached = formCache.load();
+        if (cached) {
+          setFormData(cached);
+          setError('');
+        } else {
+          resetForm();
+        }
       }
     }
   }, [isOpen, profissional]);
+
+  // Persiste no cache enquanto preenche (apenas novo cadastro)
+  useEffect(() => {
+    if (!profissional?.id && isOpen) formCache.save(formData);
+  }, [formData]);
 
   const resetForm = () => {
     setFormData({
@@ -246,6 +279,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
       }
 
       onSave();
+      formCache.clear();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar profissional');
@@ -456,7 +490,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
         <div className="border-t pt-6">
           <h3 className="font-semibold text-lg text-neutral-900 mb-4">Grupos de Atuação *</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {GRUPOS_PROFISSIONAIS.map((grupo) => (
+            {gruposOpcoes.map((grupo) => (
               <label
                 key={grupo}
                 className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${

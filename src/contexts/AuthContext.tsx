@@ -72,9 +72,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /** Redireciona para o dashboard correto baseado na role */
   const redirectByRole = (userRole: UserRole) => {
-    if (userRole === 'admin')        window.location.replace('/admin');
-    else if (userRole === 'professional') window.location.replace('/profissionais');
-    else                             window.location.replace('/');
+    if (userRole === 'admin')             window.location.replace('/admin');
+    else if (userRole === 'professional') window.location.replace('/admin/agenda');
+    else                                  window.location.replace('/');
   };
 
   useEffect(() => {
