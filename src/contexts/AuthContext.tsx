@@ -79,14 +79,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const loadUser = async () => {
+      console.log('[AUTH] loadUser: início');
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) { setLoading(false); return; }
+        if (sessionError) {
+          console.error('[AUTH] loadUser: erro getSession', sessionError);
+          setLoading(false);
+          return;
+        }
 
         if (session?.user) {
-          // Usa role do user_metadata imediatamente (sem esperar DB)
-          // para não bloquear a renderização
           const metaRole = (session.user.user_metadata?.role as UserRole) ?? 'client';
+          console.log('[AUTH] loadUser: sessão encontrada, metaRole=', metaRole);
           setUser({
             id:        session.user.id,
             email:     session.user.email,
@@ -95,20 +99,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           setRole(metaRole);
           setLoading(false);
+          console.log('[AUTH] loadUser: setLoading(false) chamado');
 
-          // Em background, verifica a tabela DB para atualizar se necessário
           fetchUserRole(session.user.id, session.user.user_metadata, session.user.email)
             .then(({ role: dbRole, full_name }) => {
+              console.log('[AUTH] loadUser: dbRole=', dbRole, 'metaRole=', metaRole);
               if (dbRole !== metaRole) {
                 setRole(dbRole);
                 setUser(prev => prev ? { ...prev, role: dbRole, full_name: full_name ?? prev.full_name } : prev);
               }
             });
+        } else {
+          console.log('[AUTH] loadUser: sem sessão ativa');
         }
       } catch (err) {
-        console.error('Erro ao carregar sessão:', err);
+        console.error('[AUTH] loadUser: exceção', err);
       } finally {
         setLoading(false);
+        console.log('[AUTH] loadUser: finally — setLoading(false)');
       }
     };
 
@@ -116,26 +124,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Só limpa o usuário no logout explícito — token refresh e reconexões
-        // não devem desmontar o contexto e causar tela em branco
+        console.log('[AUTH] onAuthStateChange: event=', event, 'hasSession=', !!session?.user);
+
         if (event === 'SIGNED_OUT') {
+          console.log('[AUTH] SIGNED_OUT: limpando user');
           setUser(null);
           setRole(null);
           setLoading(false);
           return;
         }
 
-        // Ignora eventos sem sessão que não sejam logout (ex: reconexão WS)
         if (!session?.user) {
+          console.log('[AUTH] evento sem sessão ignorado:', event);
           setLoading(false);
           return;
         }
 
+        console.log('[AUTH] buscando role no DB para evento:', event);
         const { role: userRole, full_name } = await fetchUserRole(
           session.user.id,
           session.user.user_metadata,
           session.user.email
         );
+        console.log('[AUTH] role obtida:', userRole);
         setUser({
           id:        session.user.id,
           email:     session.user.email,
@@ -144,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         setRole(userRole);
         setLoading(false);
+        console.log('[AUTH] onAuthStateChange: setLoading(false) para evento', event);
       }
     );
 

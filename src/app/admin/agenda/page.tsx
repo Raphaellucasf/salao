@@ -68,11 +68,12 @@ export default function AgendaPage() {
 
   // Carregar profissionais
   useEffect(() => {
+    console.log('[AGENDA] mount — chamando loadProfessionals()');
     loadProfessionals();
   }, []);
 
-  // Carregar agendamentos quando mudar a data
   useEffect(() => {
+    console.log('[AGENDA] selectedDate mudou — chamando loadAppointments()');
     loadAppointments();
   }, [selectedDate]);
 
@@ -102,6 +103,7 @@ export default function AgendaPage() {
   // Carrega appointments do Supabase
   const loadAppointments = async () => {
     try {
+      console.log('[AGENDA] loadAppointments: início');
       setLoading(true);
       
       const dataFormatada = selectedDate.toISOString().split('T')[0];
@@ -235,11 +237,13 @@ export default function AgendaPage() {
       });
 
       setAppointments(apts);
+      console.log('[AGENDA] loadAppointments: ', apts.length, 'appointments montados');
     } catch (error) {
-      console.error('Erro ao carregar agendamentos:', error);
+      console.error('[AGENDA] loadAppointments: erro', error);
       setAppointments([]);
     } finally {
       setLoading(false);
+      console.log('[AGENDA] loadAppointments: fim, setLoading(false)');
     }
   };
 

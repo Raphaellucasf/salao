@@ -59,18 +59,25 @@ export default function AdminLayout({
   const { user, loading } = useAuth();
   const [authChecked, setAuthChecked] = useState(false);
 
-  // Marca que a primeira verificação de auth foi concluída
   useEffect(() => {
-    if (!loading) setAuthChecked(true);
+    console.log('[LAYOUT] loading=', loading, 'user=', !!user, 'authChecked=', authChecked);
+    if (!loading) {
+      setAuthChecked(true);
+      console.log('[LAYOUT] authChecked → true');
+    }
   }, [loading]);
 
-  // Redireciona sem spinner bloqueante — nunca desmonta filhos por re-checks
   useEffect(() => {
-    if (authChecked && !user) router.replace('/login');
+    if (authChecked && !user) {
+      console.log('[LAYOUT] sem user após check — redirect /login');
+      router.replace('/login');
+    }
   }, [authChecked, user, router]);
 
-  // Bloqueia SOMENTE antes da primeira verificação, ou se definitivamente não autenticado
-  if (!authChecked) return null;
+  if (!authChecked) {
+    console.log('[LAYOUT] aguardando primeira verificação de auth...');
+    return null;
+  }
   if (!user) return null;
 
   return (
