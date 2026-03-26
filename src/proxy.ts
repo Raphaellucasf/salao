@@ -49,26 +49,18 @@ export async function middleware(req: NextRequest) {
 
     const userRole = userData?.role ?? 'client';
 
-    // Rota /admin → apenas admin
+    // Rota /admin → admin ou professional (client não entra)
     if (pathname.startsWith('/admin')) {
-      if (userRole !== 'admin') {
-        const dest = userRole === 'professional' ? '/profissionais' : '/';
-        return NextResponse.redirect(new URL(dest, req.url));
-      }
-    }
-
-    // Rota /profissionais → professional ou admin
-    if (pathname.startsWith('/profissionais')) {
-      if (userRole !== 'professional' && userRole !== 'admin') {
+      if (userRole !== 'admin' && userRole !== 'professional') {
         return NextResponse.redirect(new URL('/', req.url));
       }
     }
 
-    // Usuário logado na tela de login → redireciona
+    // Usuário logado na tela de login → redireciona para o lugar certo
     if (pathname === '/login') {
       const dest =
         userRole === 'admin' ? '/admin/dashboard' :
-        userRole === 'professional' ? '/profissionais' : '/';
+        userRole === 'professional' ? '/admin/agenda' : '/';
       return NextResponse.redirect(new URL(dest, req.url));
     }
   }
