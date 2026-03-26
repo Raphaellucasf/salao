@@ -116,23 +116,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session?.user) {
-          const { role: userRole, full_name } = await fetchUserRole(
-            session.user.id,
-            session.user.user_metadata,
-            session.user.email
-          );
-          setUser({
-            id:        session.user.id,
-            email:     session.user.email,
-            role:      userRole,
-            full_name: full_name ?? session.user.user_metadata?.full_name,
-          });
-          setRole(userRole);
-        } else {
+        // Só limpa o usuário no logout explícito — token refresh e reconexões
+        // não devem desmontar o contexto e causar tela em branco
+        if (event === 'SIGNED_OUT') {
           setUser(null);
           setRole(null);
+          setLoading(false);
+          return;
         }
+
+        // Ignora eventos sem sessão que não sejam logout (ex: reconexão WS)
+        if (!session?.user) {
+          setLoading(false);
+          return;
+        }
+
+        const { role: userRole, full_name } = await fetchUserRole(
+          session.user.id,
+          session.user.user_metadata,
+          session.user.email
+        );
+        setUser({
+          id:        session.user.id,
+          email:     session.user.email,
+          role:      userRole,
+          full_name: full_name ?? session.user.user_metadata?.full_name,
+        });
+        setRole(userRole);
         setLoading(false);
       }
     );
