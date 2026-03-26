@@ -57,7 +57,6 @@ export default function AdminDashboard() {
   const [comissoesMes, setComissoesMes] = useState<ComissaoProfissional[]>([]);
 
   useEffect(() => {
-    console.log('[DASHBOARD] mount — chamando loadDashboard()');
     loadDashboard();
   }, []);
 
@@ -95,7 +94,6 @@ export default function AdminDashboard() {
   }, []);
 
   const loadDashboard = async () => {
-    console.log('[DASHBOARD] loadDashboard: início');
     setLoading(true);
     try {
       const hoje = new Date().toISOString().split('T')[0];
@@ -249,10 +247,9 @@ export default function AdminDashboard() {
 
       setComissoesMes(ranking);
     } catch (err) {
-      console.error('[DASHBOARD] loadDashboard: erro', err);
+      console.error('Erro ao carregar dashboard:', err);
     } finally {
       setLoading(false);
-      console.log('[DASHBOARD] loadDashboard: fim, setLoading(false)');
     }
   };
 

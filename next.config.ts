@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  reactStrictMode: false, // desabilita double-mount em dev (evita 2x queries Supabase)
 };
 
 export default nextConfig;

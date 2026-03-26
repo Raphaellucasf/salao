@@ -60,24 +60,14 @@ export default function AdminLayout({
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    console.log('[LAYOUT] loading=', loading, 'user=', !!user, 'authChecked=', authChecked);
-    if (!loading) {
-      setAuthChecked(true);
-      console.log('[LAYOUT] authChecked → true');
-    }
+    if (!loading) setAuthChecked(true);
   }, [loading]);
 
   useEffect(() => {
-    if (authChecked && !user) {
-      console.log('[LAYOUT] sem user após check — redirect /login');
-      router.replace('/login');
-    }
+    if (authChecked && !user) router.replace('/login');
   }, [authChecked, user, router]);
 
-  if (!authChecked) {
-    console.log('[LAYOUT] aguardando primeira verificação de auth...');
-    return null;
-  }
+  if (!authChecked) return null;
   if (!user) return null;
 
   return (

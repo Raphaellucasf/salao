@@ -79,18 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const loadUser = async () => {
-      console.log('[AUTH] loadUser: início');
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          console.error('[AUTH] loadUser: erro getSession', sessionError);
-          setLoading(false);
-          return;
-        }
+        if (sessionError) { setLoading(false); return; }
 
         if (session?.user) {
           const metaRole = (session.user.user_metadata?.role as UserRole) ?? 'client';
-          console.log('[AUTH] loadUser: sessão encontrada, metaRole=', metaRole);
           setUser({
             id:        session.user.id,
             email:     session.user.email,
@@ -99,63 +93,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           setRole(metaRole);
           setLoading(false);
-          console.log('[AUTH] loadUser: setLoading(false) chamado');
 
           fetchUserRole(session.user.id, session.user.user_metadata, session.user.email)
             .then(({ role: dbRole, full_name }) => {
-              console.log('[AUTH] loadUser: dbRole=', dbRole, 'metaRole=', metaRole);
               if (dbRole !== metaRole) {
                 setRole(dbRole);
                 setUser(prev => prev ? { ...prev, role: dbRole, full_name: full_name ?? prev.full_name } : prev);
               }
             });
-        } else {
-          console.log('[AUTH] loadUser: sem sessão ativa');
         }
       } catch (err) {
-        console.error('[AUTH] loadUser: exceção', err);
+        console.error('Erro ao carregar sessão:', err);
       } finally {
         setLoading(false);
-        console.log('[AUTH] loadUser: finally — setLoading(false)');
       }
     };
 
     loadUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('[AUTH] onAuthStateChange: event=', event, 'hasSession=', !!session?.user);
-
+      (event, session) => {
+        // Só reage ao logout — tudo mais é tratado pelo loadUser no mount
         if (event === 'SIGNED_OUT') {
-          console.log('[AUTH] SIGNED_OUT: limpando user');
           setUser(null);
           setRole(null);
           setLoading(false);
-          return;
         }
-
-        if (!session?.user) {
-          console.log('[AUTH] evento sem sessão ignorado:', event);
-          setLoading(false);
-          return;
-        }
-
-        console.log('[AUTH] buscando role no DB para evento:', event);
-        const { role: userRole, full_name } = await fetchUserRole(
-          session.user.id,
-          session.user.user_metadata,
-          session.user.email
-        );
-        console.log('[AUTH] role obtida:', userRole);
-        setUser({
-          id:        session.user.id,
-          email:     session.user.email,
-          role:      userRole,
-          full_name: full_name ?? session.user.user_metadata?.full_name,
-        });
-        setRole(userRole);
-        setLoading(false);
-        console.log('[AUTH] onAuthStateChange: setLoading(false) para evento', event);
+        // INITIAL_SESSION, TOKEN_REFRESHED, SIGNED_IN: ignorados.
+        // loadUser já capturou a sessão no mount.
       }
     );
 
