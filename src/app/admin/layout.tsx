@@ -1,9 +1,8 @@
 ﻿'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import AdminSidebarNew from '@/components/layout/AdminSidebarNew';
 import QuickActions from '@/components/layout/QuickActions';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -57,9 +56,18 @@ export default function AdminLayout({
     },
   ]);
 
-  // Protecao: permite admin e professional (usuarios do sistema)
+  const { user, loading } = useAuth();
+
+  // Redireciona sem spinner bloqueante — evita desmontar filhos durante re-checks de auth
+  useEffect(() => {
+    if (!loading && !user) router.replace('/login');
+  }, [user, loading, router]);
+
+  // Não renderiza nada apenas se definitivamente não autenticado (sem loading)
+  if (!loading && !user) return null;
+
   return (
-    <ProtectedRoute allowedRoles={['admin', 'professional']}>
+    <>
       <div className="min-h-screen bg-neutral-50">
         {/* Sidebar */}
         <AdminSidebarNew />
@@ -88,6 +96,6 @@ export default function AdminLayout({
         isOpen={buscarAgendaModalOpen}
         onClose={() => setBuscarAgendaModalOpen(false)}
       />
-    </ProtectedRoute>
+    </>
   );
 }

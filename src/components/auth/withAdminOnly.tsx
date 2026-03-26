@@ -14,7 +14,8 @@ export function withAdminOnly<P extends object>(
 ) {
   function AdminProtected(props: P) {
     const { isAdmin, loading } = useAdminOnly();
-    if (loading || !isAdmin) return null;
+    // Não desmonta durante loading — evita perda de estado da página
+    if (!loading && !isAdmin) return null;
     return <Component {...props} />;
   }
   AdminProtected.displayName = `AdminOnly(${Component.displayName || Component.name})`;
