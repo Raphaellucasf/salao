@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "check_db.ts", "check_db.js", "check_db.cjs", "fetch_db.mjs", "refactor_agenda.js", "scan.js"]
 }
