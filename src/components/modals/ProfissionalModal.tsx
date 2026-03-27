@@ -16,16 +16,18 @@ interface ProfissionalModalProps {
   onSave: () => void;
 }
 
-// Lista padrão de grupos (fallback caso não haja dados no banco)
-const GRUPOS_PROFISSIONAIS_DEFAULT = [
-  'Aplicação Procedimento',
-  'Cabelo',
-  'Cabelo Festa',
-  'Eventos',
-  'Estética',
-  'Finalização',
-  'Manicure e Pedicure',
-];
+interface GrupoServico {
+  id: string;
+  nome: string;
+  cor: string | null;
+  icone: string | null;
+}
+
+interface ServicoItem {
+  id: string;
+  nome: string;
+  duracao_minutos: number | null;
+}
 
 // Dias da semana
 const DIAS_SEMANA = [
@@ -42,23 +44,38 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
   const formCache = useFormCache<typeof formData>('profissional_novo');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [gruposOpcoes, setGruposOpcoes] = useState<string[]>(GRUPOS_PROFISSIONAIS_DEFAULT);
+  const [gruposDB, setGruposDB] = useState<GrupoServico[]>([]);
+  const [servicosPorGrupo, setServicosPorGrupo] = useState<Record<string, ServicoItem[]>>({});
+  const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set());
 
-  // Carrega grupos já usados por profissionais cadastrados e mescla com os padrões
-  const loadGrupos = async () => {
+  // Carrega grupos e serviços dinamicamente da tabela grupos_servicos
+  const loadGruposEServicos = async () => {
     try {
-      const { data } = await supabase
-        .from('profissionais')
-        .select('grupos')
-        .not('grupos', 'is', null);
+      const [{ data: grupos }, { data: servicos }] = await Promise.all([
+        supabase
+          .from('grupos_servicos')
+          .select('id, nome, cor, icone')
+          .eq('ativo', true)
+          .order('nome'),
+        supabase
+          .from('servicos')
+          .select('id, nome, duracao_minutos, grupo_id')
+          .eq('ativo', true)
+          .order('nome'),
+      ]);
 
-      if (data && data.length > 0) {
-        const gruposDoBanco = data.flatMap((p: any) => Array.isArray(p.grupos) ? p.grupos : []);
-        const merged = [...new Set([...GRUPOS_PROFISSIONAIS_DEFAULT, ...gruposDoBanco])].sort();
-        setGruposOpcoes(merged);
+      if (grupos) {
+        setGruposDB(grupos);
+        const porGrupo: Record<string, ServicoItem[]> = {};
+        grupos.forEach((g: any) => {
+          porGrupo[g.nome] = (servicos || [])
+            .filter((s: any) => s.grupo_id === g.id)
+            .map((s: any) => ({ id: s.id, nome: s.nome, duracao_minutos: s.duracao_minutos }));
+        });
+        setServicosPorGrupo(porGrupo);
       }
     } catch {
-      // Mantém o fallback padrão
+      // Mantém estado vazio como fallback
     }
   };
 
@@ -81,7 +98,8 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     recebe_comissao: true,
     percentual_comissao: 50,
     // Configurações
-    grupos: [] as string[],
+    grupos: [] as string[], // grupos onde atua (permissão de Auxiliar no grupo inteiro)
+    servicos_habilitados: [] as string[], // IDs de serviços onde pode atuar como Principal
     dias_trabalho: [] as number[],
     horario_personalizado: true,
     hora_inicio: '09:00',
@@ -96,7 +114,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
 
   useEffect(() => {
     if (isOpen) {
-      loadGrupos();
+      loadGruposEServicos();
       if (profissional) {
         setFormData({
           nome: profissional.nome || '',
@@ -115,6 +133,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           recebe_comissao: profissional.recebe_comissao !== false,
           percentual_comissao: profissional.percentual_comissao || 50,
           grupos: profissional.grupos || [],
+          servicos_habilitados: profissional.servicos_habilitados || [],
           dias_trabalho: profissional.dias_trabalho || [1, 2, 3, 4, 5],
           horario_personalizado: true,
           hora_inicio: profissional.hora_inicio || '09:00',
@@ -156,6 +175,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
   }, [formData]);
 
   const resetForm = () => {
+    setGruposExpandidos(new Set());
     setFormData({
       nome: '',
       email: '',
@@ -173,6 +193,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
       recebe_comissao: true,
       percentual_comissao: 50,
       grupos: [],
+      servicos_habilitados: [],
       dias_trabalho: [1, 2, 3, 4, 5], // Segunda a Sexta por padrão
       horario_personalizado: true,
       hora_inicio: '09:00',
@@ -187,13 +208,45 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     setError('');
   };
 
-  const toggleGrupo = (grupo: string) => {
+  const toggleGrupo = (grupoNome: string) => {
+    setFormData(prev => {
+      const estaNoGrupo = prev.grupos.includes(grupoNome);
+      if (estaNoGrupo) {
+        // Ao remover o grupo, remove também os serviços habilitados desse grupo
+        const servicosDoGrupo = new Set((servicosPorGrupo[grupoNome] || []).map(s => s.id));
+        return {
+          ...prev,
+          grupos: prev.grupos.filter(g => g !== grupoNome),
+          servicos_habilitados: prev.servicos_habilitados.filter(id => !servicosDoGrupo.has(id)),
+          comissoes_por_grupo: Object.fromEntries(
+            Object.entries(prev.comissoes_por_grupo).filter(([k]) => k !== grupoNome)
+          ),
+        };
+      } else {
+        setGruposExpandidos(prev2 => new Set([...prev2, grupoNome]));
+        return {
+          ...prev,
+          grupos: [...prev.grupos, grupoNome],
+        };
+      }
+    });
+  };
+
+  const toggleServico = (servicoId: string) => {
     setFormData(prev => ({
       ...prev,
-      grupos: prev.grupos.includes(grupo)
-        ? prev.grupos.filter(g => g !== grupo)
-        : [...prev.grupos, grupo]
+      servicos_habilitados: prev.servicos_habilitados.includes(servicoId)
+        ? prev.servicos_habilitados.filter(id => id !== servicoId)
+        : [...prev.servicos_habilitados, servicoId],
     }));
+  };
+
+  const toggleGrupoExpandido = (grupoNome: string) => {
+    setGruposExpandidos(prev => {
+      const next = new Set(prev);
+      if (next.has(grupoNome)) next.delete(grupoNome); else next.add(grupoNome);
+      return next;
+    });
   };
 
   const toggleDia = (dia: number) => {
@@ -246,11 +299,15 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
         cidade: formData.cidade || null,
         estado: formData.estado || null,
         cep: formData.cep || null,
+        tipo_contrato: formData.tipo_contrato,
+        cor_agenda: formData.cor_agenda,
         tem_salario_fixo: formData.tem_salario_fixo,
         salario_fixo: formData.tem_salario_fixo ? formData.salario_fixo : null,
         recebe_comissao: formData.recebe_comissao,
         percentual_comissao: formData.recebe_comissao ? formData.percentual_comissao : null,
         grupos: formData.grupos,
+        servicos_habilitados: formData.servicos_habilitados,
+        comissoes_por_grupo: formData.comissoes_por_grupo,
         dias_trabalho: formData.dias_trabalho,
         hora_inicio: formData.hora_inicio,
         hora_fim: formData.hora_fim,
@@ -488,27 +545,151 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
 
         {/* Grupos de Atuação */}
         <div className="border-t pt-6">
-          <h3 className="font-semibold text-lg text-neutral-900 mb-4">Grupos de Atuação *</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {gruposOpcoes.map((grupo) => (
-              <label
-                key={grupo}
-                className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                  formData.grupos.includes(grupo)
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-neutral-200 hover:border-neutral-300'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={formData.grupos.includes(grupo)}
-                  onChange={() => toggleGrupo(grupo)}
-                  className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
-                />
-                <span className="text-sm font-medium text-neutral-700">{grupo}</span>
-              </label>
-            ))}
-          </div>
+          <h3 className="font-semibold text-lg text-neutral-900 mb-1">Grupos de Atuação *</h3>
+          <p className="text-xs text-neutral-500 mb-4">
+            Marcar o <strong>grupo</strong> autoriza atuar como{' '}
+            <span className="text-amber-600 font-semibold">Auxiliar</span> em todos os serviços dele.
+            Expandir e marcar um <strong>serviço</strong> autoriza atuar como{' '}
+            <span className="text-green-600 font-semibold">Principal</span> naquele serviço.
+          </p>
+
+          {gruposDB.length === 0 ? (
+            <p className="text-sm text-neutral-400 italic">Carregando grupos...</p>
+          ) : (
+            <div className="space-y-2">
+              {gruposDB.map((grupo) => {
+                const selecionado = formData.grupos.includes(grupo.nome);
+                const expandido = gruposExpandidos.has(grupo.nome);
+                const servicos = servicosPorGrupo[grupo.nome] || [];
+                const principaisNoGrupo = servicos.filter(s => formData.servicos_habilitados.includes(s.id));
+
+                return (
+                  <div
+                    key={grupo.id}
+                    className={`border-2 rounded-lg overflow-hidden transition-all ${
+                      selecionado ? 'border-primary-400' : 'border-neutral-200'
+                    }`}
+                  >
+                    {/* Cabeçalho do grupo */}
+                    <div
+                      className={`flex items-center gap-3 p-3 ${
+                        selecionado ? 'bg-primary-50' : 'bg-white hover:bg-neutral-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selecionado}
+                        onChange={() => toggleGrupo(grupo.nome)}
+                        className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500 cursor-pointer"
+                      />
+                      {grupo.cor && (
+                        <span
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: grupo.cor }}
+                        />
+                      )}
+                      <span className="text-sm font-semibold text-neutral-800 flex-1">{grupo.nome}</span>
+
+                      {selecionado && (
+                        <span className="text-xs text-amber-600 font-medium mr-1">
+                          Auxiliar
+                          {principaisNoGrupo.length > 0 &&
+                            ` · ${principaisNoGrupo.length} Principal${principaisNoGrupo.length > 1 ? 'is' : ''}`}
+                        </span>
+                      )}
+
+                      {selecionado && servicos.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleGrupoExpandido(grupo.nome)}
+                          className="text-neutral-400 hover:text-neutral-600 transition-colors p-1 rounded"
+                          title={expandido ? 'Recolher serviços' : 'Expandir serviços'}
+                        >
+                          <svg
+                            className={`w-4 h-4 transition-transform ${expandido ? 'rotate-180' : ''}`}
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sub-lista de serviços (accordion) */}
+                    {selecionado && expandido && (
+                      <div className="border-t border-neutral-200 bg-neutral-50 px-4 py-3">
+                        {servicos.length === 0 ? (
+                          <p className="text-xs text-neutral-400 italic">Nenhum serviço cadastrado neste grupo.</p>
+                        ) : (
+                          <>
+                            <p className="text-xs text-neutral-500 mb-2 font-medium">
+                              Marque os serviços onde pode atuar como{' '}
+                              <span className="text-green-600">Principal</span>:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {servicos.map((servico) => {
+                                const isPrincipal = formData.servicos_habilitados.includes(servico.id);
+                                return (
+                                  <label
+                                    key={servico.id}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-all text-sm ${
+                                      isPrincipal
+                                        ? 'bg-green-50 border border-green-300 text-green-800'
+                                        : 'bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-300'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isPrincipal}
+                                      onChange={() => toggleServico(servico.id)}
+                                      className="w-3.5 h-3.5 text-green-600 border-neutral-300 rounded focus:ring-green-500 cursor-pointer"
+                                    />
+                                    <span className="flex-1 font-medium">{servico.nome}</span>
+                                    {isPrincipal && (
+                                      <span className="text-xs text-green-600 font-semibold">Principal</span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div className="flex gap-3 mt-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const ids = servicos.map(s => s.id);
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    servicos_habilitados: [...new Set([...prev.servicos_habilitados, ...ids])],
+                                  }));
+                                }}
+                                className="text-xs text-green-600 hover:underline"
+                              >
+                                Marcar todos como Principal
+                              </button>
+                              <span className="text-neutral-300">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const ids = new Set(servicos.map(s => s.id));
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    servicos_habilitados: prev.servicos_habilitados.filter(id => !ids.has(id)),
+                                  }));
+                                }}
+                                className="text-xs text-neutral-400 hover:underline"
+                              >
+                                Limpar seleção
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Tabela de Comissões por Grupo */}
           {formData.grupos.length > 0 && (
@@ -676,8 +857,9 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
                 className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500"
               />
               <label htmlFor="é_auxiliar" className="text-sm font-medium text-neutral-700">
-                Atua como Auxiliar
+                Auxiliar Global
               </label>
+              <span className="text-xs text-neutral-400">(pode auxiliar em qualquer serviço)</span>
             </div>
           </div>
         </div>
