@@ -289,6 +289,11 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     }
 
     try {
+      // Mapeia nomes dos grupos selecionados para seus UUIDs
+      const gruposSelecionadosIds = formData.grupos
+        .map(nome => gruposDB.find(g => g.nome === nome)?.id)
+        .filter(Boolean);
+
       const dataToSave = {
         nome: formData.nome,
         email: formData.email,
@@ -305,7 +310,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
         salario_fixo: formData.tem_salario_fixo ? formData.salario_fixo : null,
         recebe_comissao: formData.recebe_comissao,
         percentual_comissao: formData.recebe_comissao ? formData.percentual_comissao : null,
-        grupos: formData.grupos,
+        grupos_ids: gruposSelecionadosIds, // Envia os UUIDs dos grupos
         servicos_habilitados: formData.servicos_habilitados,
         comissoes_por_grupo: formData.comissoes_por_grupo,
         dias_trabalho: formData.dias_trabalho,
