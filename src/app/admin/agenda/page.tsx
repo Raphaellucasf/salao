@@ -1,9 +1,8 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card } from '@/components/ui';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
 
@@ -232,6 +231,27 @@ export default function AgendaPage() {
       setLoading(false);
     }
   };
+
+  // Exclui agendamento (e comanda em cascata, se existir)
+  const excluirAgendamento = useCallback(async (e: React.MouseEvent, apt: Appointment) => {
+    e.stopPropagation();
+    const nome = apt.client || 'este atendimento';
+    if (!confirm(`Excluir agendamento de ${nome}?`)) return;
+    try {
+      const agendamentoId = apt.agendamento_id || apt.id;
+      if (apt.comanda_id) {
+        // Deletar comanda — cascade deleta agendamento via FK
+        const { error } = await supabase.from('comandas').delete().eq('id', apt.comanda_id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('agendamentos').delete().eq('id', agendamentoId);
+        if (error) throw error;
+      }
+      await loadAppointments();
+    } catch (err: any) {
+      alert(`Erro ao excluir: ${err.message}`);
+    }
+  }, [loadAppointments]);
 
   // Cria uma comanda vinculada ao agendamento e abre o drawer
   const criarComandaFromAgendamento = async (apt: Appointment) => {
@@ -564,7 +584,7 @@ export default function AgendaPage() {
       ) : (
         <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto outline-none" style={{ cursor: 'default', userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>
-          <div className="min-w-[1000px]">
+          <div className="min-w-250">
             {/* Header com nomes dos profissionais */}
             <div className="grid bg-neutral-900 text-white sticky top-0 z-10" style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)` }}>
               <div className="p-4 border-r border-neutral-800 flex items-center justify-center">
@@ -684,13 +704,13 @@ export default function AgendaPage() {
                             }}
                             title={`${apt.client}\n${apt.tem_etapas && apt.etapa_index !== undefined ? `Etapa ${apt.etapa_index + 1}: ` : ''}${apt.service}\n${apt.startTime} (${apt.duration}min)`}
                           >
-                            {/* Linha de progresso fake (sempre 100% se for do passado, etc. Simplificando para visual MVP) */}
+                                        {/* Linha de progresso fake */}
                             <div 
-                              className="absolute bottom-0 left-0 h-[2px] bg-black/10"
+                              className="absolute bottom-0 left-0 h-0.5 bg-black/10"
                               style={{ width: '0%' }}
                             />
 
-                            <div className={`flex flex-col h-full ${isUltraCompact ? 'p-[2px] px-1 justify-center' : 'p-1.5'}`}>
+                            <div className={`flex flex-col h-full ${isUltraCompact ? 'p-0.5 px-1 justify-center' : 'p-1.5'}`}>
                               {isUltraCompact ? (
                                 <div className="flex justify-between items-center h-full">
                                   <span className="text-[10px] font-bold text-neutral-800 truncate leading-none">
@@ -702,7 +722,16 @@ export default function AgendaPage() {
                                 <>
                                   <div className="flex justify-between items-start">
                                     <span className="text-xs font-bold text-neutral-800 truncate" title={apt.client}>{apt.client}</span>
-                                    <div className={`w-1.5 h-1.5 rounded-full ${getStatusIndicator(apt.status)} flex-shrink-0 mt-1`} />
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        onClick={(e) => excluirAgendamento(e, apt)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-100 rounded"
+                                        title="Excluir agendamento"
+                                      >
+                                        <Trash2 className="w-2.5 h-2.5 text-red-500" />
+                                      </button>
+                                      <div className={`w-1.5 h-1.5 rounded-full ${getStatusIndicator(apt.status)} shrink-0`} />
+                                    </div>
                                   </div>
                                   <span className="text-[10px] text-neutral-600 truncate leading-tight mt-0.5">
                                     {apt.tem_etapas && apt.etapa_index !== undefined ? `${apt.etapa_index + 1}. ` : ''}
@@ -714,7 +743,7 @@ export default function AgendaPage() {
                                     </span>
                                     {apt.eh_auxiliar && <span className="text-[10px]">🤝</span>}
                                     {!apt.eh_auxiliar && !apt.comanda_id && (
-                                      <PlayCircle className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Iniciar Atendimento" />
+                                      <PlayCircle className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Iniciar Atendimento" />
                                     )}
                                     {!apt.eh_auxiliar && apt.comanda_id && (
                                       <span className="text-[8px] text-green-600 opacity-70" title="Comanda aberta">✓</span>
@@ -758,6 +787,7 @@ export default function AgendaPage() {
         onClose={() => {
           setComandaDrawerOpen(false);
           setSelectedComandaId(undefined);
+          loadAppointments();
         }}
         comandaId={selectedComandaId}
       />

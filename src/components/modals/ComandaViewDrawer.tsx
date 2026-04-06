@@ -1,11 +1,12 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, User, Phone, Calendar, Clock, Scissors, ShoppingBag, Package, MapPin } from 'lucide-react';
+import { X, User, Phone, Calendar, Clock, Scissors, ShoppingBag, Package, MapPin, DollarSign, Lock, Percent } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { DEFAULT_UNIT_ID } from '@/services/caixa';
 
 interface ComandaViewDrawerProps {
   isOpen: boolean;
@@ -14,11 +15,24 @@ interface ComandaViewDrawerProps {
   onEdit?: () => void;
 }
 
+interface ComissaoEntry {
+  profissional_id: string;
+  nome: string;
+  valor_sugerido: number;
+  valor: number;
+}
+
 export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }: ComandaViewDrawerProps) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [comanda, setComanda] = useState<any>(null);
   const [metodoPagamento, setMetodoPagamento] = useState('dinheiro');
   const [fechandoComanda, setFechandoComanda] = useState(false);
+
+  // T-07: comissões e desconto auditado
+  const [comissoes, setComissoes] = useState<ComissaoEntry[]>([]);
+  const [desconto, setDesconto] = useState<number>(0);
+  const [caixaFechado, setCaixaFechado] = useState(false);
 
   useEffect(() => {
     if (isOpen && comandaId) {
@@ -77,7 +91,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       if (comandaData.cliente_id) {
         const { data: clienteData } = await supabase
           .from('clientes')
-          .select('nome, telefone, email')
+          .select('nome, telefone, email, cpf')
           .eq('id', comandaData.cliente_id)
           .single();
         cliente = clienteData;
@@ -88,7 +102,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       if (comandaData.profissional_id) {
         const { data: profData } = await supabase
           .from('profissionais')
-          .select('nome, telefone')
+          .select('nome, telefone, percentual_comissao')
           .eq('id', comandaData.profissional_id)
           .single();
         profissional = profData;
@@ -99,7 +113,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       if (comandaData.auxiliar_id) {
         const { data: auxData } = await supabase
           .from('profissionais')
-          .select('nome')
+          .select('nome, percentual_comissao')
           .eq('id', comandaData.auxiliar_id)
           .single();
         auxiliar = auxData;
@@ -163,6 +177,46 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       
       console.log('✅ Comanda completa montada:', comandaCompleta);
       setComanda(comandaCompleta);
+
+      // T-07: inicializar desconto e comissões sugeridas
+      setDesconto(Number(comandaData.desconto) || 0);
+
+      const servicosTotal = (itensComEtapas ?? []).reduce(
+        (s: number, i: any) => i.tipo === 'servico' ? s + (Number(i.valor_total) || 0) : s, 0,
+      );
+
+      const entries: ComissaoEntry[] = [];
+      if (comandaData.profissional_id && profissional) {
+        const pct = Number((profissional as any).percentual_comissao) || 0;
+        entries.push({
+          profissional_id: comandaData.profissional_id,
+          nome: (profissional as any).nome ?? 'Profissional',
+          valor_sugerido: parseFloat(((pct / 100) * servicosTotal).toFixed(2)),
+          valor: parseFloat(((pct / 100) * servicosTotal).toFixed(2)),
+        });
+      }
+      if (comandaData.auxiliar_id && auxiliar) {
+        const pct = Number((auxiliar as any).percentual_comissao) || 0;
+        entries.push({
+          profissional_id: comandaData.auxiliar_id,
+          nome: (auxiliar as any).nome ?? 'Auxiliar',
+          valor_sugerido: parseFloat(((pct / 100) * servicosTotal).toFixed(2)),
+          valor: parseFloat(((pct / 100) * servicosTotal).toFixed(2)),
+        });
+      }
+      setComissoes(entries);
+
+      // T-07: verificar se caixa está fechado para a data da comanda
+      const dataComanda = (comandaData.data_abertura ?? '').split('T')[0];
+      if (dataComanda) {
+        const { data: fechamento } = await (supabase as any)
+          .from('fechamentos_caixa')
+          .select('id, status')
+          .eq('data_fechamento', dataComanda)
+          .eq('status', 'fechado')
+          .maybeSingle();
+        setCaixaFechado(!!fechamento);
+      }
     } catch (err) {
       console.error('❌ Erro ao carregar comanda:', err);
       console.error('❌ Stack:', err instanceof Error ? err.stack : 'N/A');
@@ -177,12 +231,45 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
     try {
       setFechandoComanda(true);
 
+      // T-07: montar payload de update com auditoria de desconto e fechado_por
+      const descontoNum = Math.max(0, Number(desconto) || 0);
+      const updatePayload: Record<string, any> = {
+        status: 'fechada',
+        data_fechamento: new Date().toISOString(),
+        fechado_por: user?.id ?? null,
+      };
+      if (descontoNum > 0) {
+        updatePayload.desconto = descontoNum;
+        updatePayload.desconto_aplicado_por = user?.id ?? null;
+        updatePayload.desconto_aplicado_em = new Date().toISOString();
+        updatePayload.total = Math.max(0, (Number(comanda.subtotal) || 0) - descontoNum);
+      }
+
       const { error: cmdError } = await supabase
         .from('comandas')
-        .update({ status: 'fechada', data_fechamento: new Date().toISOString() })
+        .update(updatePayload)
         .eq('id', comanda.id);
 
       if (cmdError) throw cmdError;
+
+      // T-07: persistir comissões em tabela comissoes
+      if (comissoes.length > 0 && user?.id) {
+        const rows = comissoes
+          .filter((c) => c.valor >= 0)
+          .map((c) => ({
+            comanda_id: comanda.id,
+            profissional_id: c.profissional_id,
+            valor_comissao: c.valor,
+            criado_por: user.id,
+          }));
+        if (rows.length > 0) {
+          await (supabase as any).from('comissoes').insert(rows);
+        }
+      }
+
+      const totalFinal = descontoNum > 0
+        ? Math.max(0, (Number(comanda.subtotal) || 0) - descontoNum)
+        : (comanda.total || 0);
 
       const hoje = new Date().toISOString().split('T')[0];
       const { error: transError } = await supabase
@@ -191,27 +278,81 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
           tipo: 'receita',
           descricao: `Comanda #${comanda.numero_comanda} — ${comanda.cliente_nome || 'Cliente'}`,
           categoria: 'Serviços',
-          valor: comanda.total || 0,
+          valor: totalFinal,
           metodo: metodoPagamento,
           data: hoje,
         }]);
 
       if (transError) throw transError;
 
-      // 3. Baixa automática de estoque para produtos vendidos na comanda
+      // Observação: o estoque de produtos já foi debitado quando a comanda foi criada
+      // (ComandaModal.movimentarEstoque). Aqui apenas registramos a movimentação de fechamento.
       const itensProduto = (comanda.comanda_itens || []).filter(
         (item: any) => item.tipo === 'produto' && item.item_id
       );
       for (const item of itensProduto) {
-        await supabase.rpc('registrar_movimentacao_estoque', {
-          p_produto_id: item.item_id,
-          p_tipo: 'venda',
-          p_quantidade: Math.round(item.quantidade || 1),
-          p_valor_unitario: item.valor_unitario || 0,
-          p_motivo: `Comanda #${comanda.numero_comanda}`,
-          p_documento: null,
-          p_usuario_id: null,
-        });
+        try {
+          const { data: prod } = await supabase
+            .from('produtos')
+            .select('quantidade')
+            .eq('id', item.item_id)
+            .single();
+          if (prod !== null) {
+            await supabase.from('estoque_movimentacoes').insert([{
+              produto_id: item.item_id,
+              tipo: 'venda',
+              quantidade: Math.round(item.quantidade || 1),
+              quantidade_anterior: prod.quantidade,
+              quantidade_atual: prod.quantidade,
+              valor_unitario: item.valor_unitario || 0,
+              valor_total: item.valor_total || 0,
+              motivo: `Fechamento Comanda #${comanda.numero_comanda}`,
+            }]);
+          }
+        } catch {
+          // Ignora se tabela estoque_movimentacoes não existir
+        }
+      }
+
+      // FIX: registrar pacotes pré-pagos em pacotes_cliente ao fechar comanda
+      const itensPacote = (comanda.comanda_itens || []).filter(
+        (item: any) => item.tipo === 'pacote' && item.item_id,
+      );
+      if (itensPacote.length > 0 && comanda.cliente?.cpf) {
+        for (const item of itensPacote) {
+          try {
+            const [{ data: pacoteServicos }, { data: pacoteData }] = await Promise.all([
+              supabase
+                .from('pacotes_servicos_itens')
+                .select('servico_id, quantidade')
+                .eq('pacote_id', item.item_id),
+              supabase
+                .from('pacotes_servicos')
+                .select('validade_dias')
+                .eq('id', item.item_id)
+                .single(),
+            ]);
+            if (!pacoteServicos || pacoteServicos.length === 0) continue;
+
+            const validadeDias: number | null = (pacoteData as any)?.validade_dias ?? null;
+            const dataValidade = validadeDias
+              ? new Date(Date.now() + validadeDias * 86_400_000).toISOString().split('T')[0]
+              : null;
+
+            const rows = (pacoteServicos as any[]).map((ps: any) => ({
+              unit_id: DEFAULT_UNIT_ID,
+              cliente_cpf: comanda.cliente.cpf,
+              servico_id: ps.servico_id,
+              sessoes_total: (ps.quantidade || 1) * (item.quantidade || 1),
+              sessoes_consumidas: 0,
+              comanda_origem_id: comanda.id,
+              data_validade: dataValidade,
+            }));
+            await (supabase as any).from('pacotes_cliente').insert(rows);
+          } catch {
+            // não bloqueia o fechamento
+          }
+        }
       }
 
       await loadComanda();
@@ -219,6 +360,17 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       console.error('Erro ao fechar comanda:', err);
     } finally {
       setFechandoComanda(false);
+    }
+  };
+
+  const cancelarComanda = async () => {
+    if (!comanda || !confirm(`Excluir comanda #${comanda.numero_comanda}? Esta ação não pode ser desfeita.`)) return;
+    try {
+      const { error } = await supabase.rpc('excluir_comanda', { p_comanda_id: comanda.id });
+      if (error) throw error;
+      onClose();
+    } catch (err: any) {
+      alert(`Erro ao excluir: ${err.message}`);
     }
   };
 
@@ -253,7 +405,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       {/* Drawer */}
       <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 shadow-lg">
+        <div className="sticky top-0 bg-linear-to-r from-blue-600 to-blue-700 text-white p-6 shadow-lg">
           <div className="flex items-start justify-between mb-4">
             <div>
               <h2 className="text-2xl font-bold">Comanda #{comanda?.numero_comanda || '...'}</h2>
@@ -433,14 +585,111 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
               )}
 
               {/* Total */}
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
+              <div className="bg-linear-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-neutral-600">Subtotal</span>
+                  <span className="font-medium text-neutral-700">
+                    R$ {Number(comanda.subtotal || comanda.total || 0).toFixed(2)}
+                  </span>
+                </div>
+                {Number(comanda.desconto) > 0 && comanda.status === 'fechada' && (
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-neutral-600">Desconto</span>
+                    <span className="font-medium text-red-600">- R$ {Number(comanda.desconto).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t border-green-200 mt-2">
                   <span className="text-lg font-semibold text-neutral-900">Total</span>
                   <span className="text-3xl font-bold text-green-600">
                     R$ {comanda.total?.toFixed(2) || '0.00'}
                   </span>
                 </div>
               </div>
+
+              {/* T-07: Desconto + Comissões — só para comandas abertas e caixa não fechado */}
+              {comanda.status === 'aberta' && !caixaFechado && (
+                <>
+                  {/* Desconto */}
+                  <div className="bg-neutral-50 rounded-lg p-4 space-y-3">
+                    <h3 className="font-semibold text-neutral-900 flex items-center gap-2">
+                      <DollarSign className="w-5 h-5 text-orange-500" />
+                      Desconto
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-neutral-600 shrink-0">R$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={desconto}
+                        onChange={(e) => setDesconto(Math.max(0, parseFloat(e.target.value) || 0))}
+                        className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="0,00"
+                      />
+                    </div>
+                    {desconto > 0 && (
+                      <p className="text-xs text-neutral-500">
+                        Total com desconto:{' '}
+                        <span className="font-semibold text-green-700">
+                          R$ {Math.max(0, (Number(comanda.subtotal || comanda.total) || 0) - desconto).toFixed(2)}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Comissões */}
+                  {comissoes.length > 0 && (
+                    <div className="bg-neutral-50 rounded-lg p-4 space-y-3">
+                      <h3 className="font-semibold text-neutral-900 flex items-center gap-2">
+                        <Percent className="w-5 h-5 text-blue-500" />
+                        Comissões
+                      </h3>
+                      <div className="space-y-3">
+                        {comissoes.map((entry, idx) => (
+                          <div key={entry.profissional_id} className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-neutral-900 truncate">{entry.nome}</p>
+                              {entry.valor_sugerido > 0 && (
+                                <p className="text-xs text-neutral-500">Sugestão: R$ {entry.valor_sugerido.toFixed(2)}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-sm text-neutral-600">R$</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={entry.valor}
+                                onChange={(e) => {
+                                  const novo = Math.max(0, parseFloat(e.target.value) || 0);
+                                  setComissoes((prev) => prev.map((c, i) => i === idx ? { ...c, valor: novo } : c));
+                                }}
+                                className="w-24 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Auditoria de desconto — comanda já fechada */}
+              {comanda.status === 'fechada' && Number(comanda.desconto) > 0 && comanda.desconto_aplicado_em && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs text-orange-800">
+                  Desconto de R$ {Number(comanda.desconto).toFixed(2)} aplicado em{' '}
+                  {new Date(comanda.desconto_aplicado_em).toLocaleString('pt-BR')}
+                </div>
+              )}
+
+              {/* Caixa fechado — aviso */}
+              {caixaFechado && comanda.status === 'aberta' && (
+                <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                  <Lock className="w-4 h-4 shrink-0" />
+                  Caixa deste dia está fechado — edição bloqueada.
+                </div>
+              )}
 
               {/* Ações */}
               <div className="flex flex-col gap-3 pt-4 border-t">
@@ -466,6 +715,12 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
                     </button>
                   </div>
                 )}
+                <button
+                  onClick={cancelarComanda}
+                  className="w-full border border-red-300 text-red-600 hover:bg-red-50 font-medium py-2 rounded-lg transition-colors text-sm"
+                >
+                  🗑 Excluir Comanda
+                </button>
                 <div className="flex gap-3">
                   {onEdit && comanda.status === 'aberta' && (
                     <Button

@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,9 +5,10 @@ import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Plus, Trash2, ShoppingBag, Scissors, Package as PackageIcon } from 'lucide-react';
+import { Plus, Trash2, ShoppingBag, Scissors, Package as PackageIcon, Gift } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AtribuirEtapasServico from './AtribuirEtapasServico';
+import { verificarPacoteAtivo, type PacoteAtivo } from '@/services/pacotes';
 
 interface ComandaItem {
   id?: string;
@@ -58,6 +58,28 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     valor_total: 0,
   });
 
+  // T-08: pacotes ativos do cliente selecionado
+  const [pacotesAtivos, setPacotesAtivos] = useState<PacoteAtivo[]>([]);
+  const [pacotesDismissed, setPacotesDismissed] = useState<Set<string>>(new Set());
+
+  // Verifica pacotes sempre que o cliente mudar
+  useEffect(() => {
+    async function checarPacotes() {
+      if (!formData.cliente_id) { setPacotesAtivos([]); return; }
+      const cliente = clientes.find((c) => c.id === formData.cliente_id);
+      if (!cliente?.cpf) { setPacotesAtivos([]); return; }
+      try {
+        const ativos = await verificarPacoteAtivo(cliente.cpf);
+        setPacotesAtivos(ativos);
+        setPacotesDismissed(new Set()); // reset ao trocar de cliente
+      } catch {
+        setPacotesAtivos([]);
+      }
+    }
+    checarPacotes();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.cliente_id, clientes]);
+
   useEffect(() => {
     if (isOpen) {
       loadData();
@@ -75,7 +97,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         supabase.from('clientes').select('*').order('nome'),
         supabase.from('produtos').select('*').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('servicos').select('*').order('nome'),
-        supabase.from('pacotes').select('*').eq('ativo', true).order('nome'),
+        supabase.from('pacotes_servicos').select('*').eq('ativo', true).order('nome'),
         supabase.from('profissionais').select('id, nome, é_auxiliar').eq('ativo', true).order('nome'),
       ]);
 
@@ -239,12 +261,13 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     } else if (tipo === 'pacote') {
       item = pacotes.find(p => p.id === value);
       if (item) {
+        const precoPacote = item.preco_total || item.preco || 0;
         setNovoItem({
           ...novoItem,
           item_id: item.id,
           descricao: item.nome,
-          valor_unitario: item.preco || 0,
-          valor_total: (item.preco || 0) * novoItem.quantidade,
+          valor_unitario: precoPacote,
+          valor_total: precoPacote * novoItem.quantidade,
           tem_etapas: false,
           etapas: [],
           atribuicoes_etapas: [],
@@ -300,7 +323,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     return itens.reduce((sum, item) => sum + item.valor_total, 0);
   };
 
-  // Atualiza o estoque: delta = -1 para debitar (venda), +1 para estornar (edição)
+  // Atualiza o estoque: delta = -1 para debitar (venda/uso), +1 para estornar (edição)
   const movimentarEstoque = async (itemsComanda: ComandaItem[], delta: number) => {
     const produtoItems = itemsComanda.filter(i => i.tipo === 'produto' && i.item_id);
     if (produtoItems.length === 0) return;
@@ -324,6 +347,67 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     }
   };
 
+  // Task 6: consome insumos de uso_interno vinculados a serviços via servicos_produtos
+  // delta = -1 ao salvar, +1 ao estornar (edição de comanda existente)
+  const consumirInsumosServico = async (itemsComanda: ComandaItem[], delta: number) => {
+    const servicoItems = itemsComanda.filter(i => i.tipo === 'servico' && i.item_id);
+    if (servicoItems.length === 0) return;
+
+    // Coleta todos os servico_ids únicos
+    const servicoIds = [...new Set(servicoItems.map(i => i.item_id!))];
+
+    // Busca produtos vinculados a esses serviços
+    const { data: vinculos, error } = await supabase
+      .from('servicos_produtos')
+      .select('servico_id, produto_id, quantidade_media')
+      .in('servico_id', servicoIds);
+
+    if (error || !vinculos || vinculos.length === 0) return;
+
+    // Agrega: para cada produto, multiplica quantidade_media × QTD do serviço na comanda
+    const agrupado: Record<string, number> = {};
+    for (const item of servicoItems) {
+      const vinculosServico = vinculos.filter(v => v.servico_id === item.item_id);
+      for (const v of vinculosServico) {
+        const qtdConsumo = (v.quantidade_media || 0) * item.quantidade;
+        agrupado[v.produto_id] = (agrupado[v.produto_id] || 0) + qtdConsumo;
+      }
+    }
+
+    for (const [produtoId, qtd] of Object.entries(agrupado)) {
+      if (qtd <= 0) continue;
+
+      const { data: prod } = await supabase
+        .from('produtos')
+        .select('quantidade, tipo')
+        .eq('id', produtoId)
+        .single();
+
+      if (!prod) continue;
+
+      const qtdAnterior = prod.quantidade || 0;
+      const qtdNova = Math.max(0, qtdAnterior + delta * qtd);
+
+      await supabase.from('produtos').update({ quantidade: qtdNova }).eq('id', produtoId);
+
+      // Registra movimentação (tabela pode não existir em todos os envs)
+      if (delta < 0) {
+        try {
+          await supabase.from('estoque_movimentacoes').insert([{
+            produto_id: produtoId,
+            tipo: 'uso_interno',
+            quantidade: qtd,
+            quantidade_anterior: qtdAnterior,
+            quantidade_atual: qtdNova,
+            motivo: 'Consumo automático por serviço na comanda',
+          }]);
+        } catch {
+          // Ignora se tabela não existir
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -335,12 +419,17 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       return;
     }
 
+    if (!formData.cliente_id) {
+      setError('Selecione um cliente para a comanda');
+      setLoading(false);
+      return;
+    }
+
     try {
       const cliente = clientes.find(c => c.id === formData.cliente_id);
       const total = calcularTotal();
 
       if (comandaId) {
-        // Atualizar comanda existente
         const { error: updateError } = await supabase
           .from('comandas')
           .update({
@@ -363,6 +452,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           .select('tipo, item_id, quantidade')
           .eq('comanda_id', comandaId);
         await movimentarEstoque(itensAntigos || [], +1);
+        await consumirInsumosServico(itensAntigos || [], +1);
 
         // Deletar itens antigos e suas etapas
         await supabase.from('comanda_itens').delete().eq('comanda_id', comandaId);
@@ -410,9 +500,49 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           if (etapasError) throw etapasError;
         }
 
-        // Debitar estoque dos novos itens produto
+        // Debitar estoque dos novos itens produto e consumir insumos dos serviços
         await movimentarEstoque(itens, -1);
+        await consumirInsumosServico(itens, -1);
+
+        // Sincroniza servicos + cliente no agendamento vinculado
+        const servicosJsonUp = itens
+          .filter(i => i.tipo === 'servico' && i.item_id)
+          .map(i => {
+            const svc = servicos.find(s => s.id === i.item_id);
+            return { id: i.item_id, nome: i.descricao, valor: i.valor_unitario, duracao: svc?.duracao_minutos || 0, quantidade: i.quantidade };
+          });
+        await supabase.from('agendamentos').update({
+          servicos: servicosJsonUp,
+          cliente_nome: cliente?.nome || null,
+          cliente_telefone: (cliente as any)?.telefone || null,
+        }).eq('comanda_id', comandaId);
       } else {
+        // Validar conflito de horário antes de criar
+        if (formData.profissional_id && formData.data_agendamento && formData.hora_inicio) {
+          const duracaoItems = itens
+            .filter(i => i.tipo === 'servico' && i.item_id)
+            .reduce((s, i) => {
+              const svc = servicos.find(sv => sv.id === i.item_id);
+              return s + (svc?.duracao_minutos || 0) * (i.quantidade || 1);
+            }, 0) || 60;
+          const [h, m] = formData.hora_inicio.split(':').map(Number);
+          const fimMin = h * 60 + m + duracaoItems;
+          const horaFimConflito = `${String(Math.floor(fimMin / 60)).padStart(2, '0')}:${String(fimMin % 60).padStart(2, '0')}:00`;
+          const horaInicioConflito = formData.hora_inicio + ':00';
+          const { data: overlap } = await supabase
+            .from('agendamentos')
+            .select('id, hora_inicio, hora_fim, cliente_nome')
+            .eq('profissional_id', formData.profissional_id)
+            .eq('data_agendamento', formData.data_agendamento)
+            .neq('status', 'cancelado')
+            .lt('hora_inicio', horaFimConflito)
+            .gt('hora_fim', horaInicioConflito);
+          if (overlap && overlap.length > 0) {
+            const h0 = (overlap[0] as any).hora_inicio?.substring(0, 5) || '';
+            throw new Error(`Conflito de horário: profissional já possui atendimento às ${h0}`);
+          }
+        }
+
         // Criar nova comanda
         const { data: novaComanda, error: insertError } = await supabase
           .from('comandas')
@@ -476,8 +606,26 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           if (etapasError) throw etapasError;
         }
 
-        // Debitar estoque dos itens produto na criação
+        // Debitar estoque dos itens produto na criação e insumos dos serviços
         await movimentarEstoque(itens, -1);
+        await consumirInsumosServico(itens, -1);
+
+        // Sincroniza servicos + cliente no agendamento criado pelo trigger
+        // (trigger dispara no INSERT, antes dos itens — precisa de update posterior)
+        const servicosJson = itens
+          .filter(i => i.tipo === 'servico' && i.item_id)
+          .map(i => {
+            const svc = servicos.find(s => s.id === i.item_id);
+            return { id: i.item_id, nome: i.descricao, valor: i.valor_unitario, duracao: svc?.duracao_minutos || 0, quantidade: i.quantidade };
+          });
+        await supabase
+          .from('agendamentos')
+          .update({
+            servicos: servicosJson,
+            cliente_nome: cliente?.nome || null,
+            cliente_telefone: (cliente as any)?.telefone || null,
+          })
+          .eq('comanda_id', novaComanda.id);
       }
 
       onSave();
@@ -530,6 +678,35 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             ))}
           </select>
         </div>
+
+        {/* T-08: Alertas de pacote ativo */}
+        {pacotesAtivos
+          .filter((p) => !pacotesDismissed.has(p.id))
+          .map((pacote) => (
+            <div
+              key={pacote.id}
+              className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3"
+            >
+              <Gift className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-900">
+                  Pacote disponível: {pacote.servico_nome}
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {pacote.sessoes_restantes} sessão{pacote.sessoes_restantes !== 1 ? 'ões' : ''} disponível{pacote.sessoes_restantes !== 1 ? 'is' : ''} de {pacote.sessoes_total}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPacotesDismissed((prev) => new Set([...prev, pacote.id]))}
+                className="text-amber-500 hover:text-amber-700 text-xs font-medium shrink-0"
+                title="Dispensar alerta"
+              >
+                Fechar
+              </button>
+            </div>
+          ))
+        }
 
         {/* Profissional e Auxiliar */}
         <div className="grid grid-cols-2 gap-4">
@@ -629,7 +806,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
                   <option key={s.id} value={s.id}>{s.nome} - R$ {s.preco}</option>
                 ))}
                 {novoItem.tipo === 'pacote' && pacotes.map(p => (
-                  <option key={p.id} value={p.id}>{p.nome} - R$ {p.preco}</option>
+                  <option key={p.id} value={p.id}>{p.nome} - R$ {(p.preco_total || p.preco || 0).toFixed(2)}</option>
                 ))}
               </select>
             </div>

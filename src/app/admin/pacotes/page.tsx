@@ -5,7 +5,7 @@ import { Card } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Plus, Package as PackageIcon, Edit, Trash2 } from 'lucide-react';
-import PacoteModal from '@/components/modals/PacoteModal';
+import PacoteServicoModal from '@/components/modals/PacoteServicoModal';
 import { supabase } from '@/lib/supabase';
 
 export default function PacotesPage() {
@@ -22,8 +22,8 @@ export default function PacotesPage() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('pacotes')
-        .select('*, pacote_servicos(*)')
+        .from('pacotes_servicos')
+        .select('*, pacotes_servicos_itens(*, servicos(nome))')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -44,9 +44,8 @@ export default function PacotesPage() {
     if (!confirm('Desativar este pacote?')) return;
 
     try {
-      const { error } = await supabase
-        .from('pacotes')
-        // @ts-ignore - pacotes table not in types
+      const { error } = await (supabase as any)
+        .from('pacotes_servicos')
         .update({ ativo: false })
         .eq('id', id);
 
@@ -59,7 +58,7 @@ export default function PacotesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <PacoteModal
+      <PacoteServicoModal
         isOpen={modalOpen}
         onClose={() => {
           setModalOpen(false);
@@ -103,7 +102,7 @@ export default function PacotesPage() {
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center shrink-0">
                       <PackageIcon className="w-5 h-5 text-primary-600" />
                     </div>
                     <div>
@@ -119,9 +118,9 @@ export default function PacotesPage() {
                 <div className="border-t pt-3">
                   <p className="text-xs text-neutral-600 mb-2">Serviços inclusos:</p>
                   <div className="space-y-1">
-                    {pacote.pacote_servicos?.map((s: any, idx: number) => (
+                    {pacote.pacotes_servicos_itens?.map((s: any, idx: number) => (
                       <div key={idx} className="text-sm text-neutral-700">
-                        • {s.quantidade}x {s.servico_nome}
+                        • {s.quantidade}x {s.servicos?.nome || '—'}
                       </div>
                     ))}
                   </div>
@@ -131,7 +130,7 @@ export default function PacotesPage() {
                   <div>
                     <p className="text-xs text-neutral-600">Preço</p>
                     <p className="text-2xl font-bold text-primary-600">
-                      R$ {pacote.preco.toFixed(2)}
+                      R$ {(pacote.preco_total || 0).toFixed(2)}
                     </p>
                   </div>
                   <div className="text-right">

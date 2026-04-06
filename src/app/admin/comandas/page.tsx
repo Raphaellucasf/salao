@@ -56,7 +56,6 @@ export default function ComandasPage() {
     try {
       const { error } = await supabase
         .from('comandas')
-        // @ts-ignore - comandas table not in types
         .update({
           status: 'fechada',
           data_fechamento: new Date().toISOString(),
@@ -71,19 +70,14 @@ export default function ComandasPage() {
   };
 
   const handleCancelarComanda = async (comanda: any) => {
-    if (!confirm(`Cancelar comanda #${comanda.numero_comanda}?`)) return;
+    if (!confirm(`Excluir comanda #${comanda.numero_comanda}? Esta ação não pode ser desfeita.`)) return;
 
     try {
-      const { error } = await supabase
-        .from('comandas')
-        // @ts-ignore - comandas table not in types
-        .update({ status: 'cancelada' })
-        .eq('id', comanda.id);
-
+      const { error } = await supabase.rpc('excluir_comanda', { p_comanda_id: comanda.id });
       if (error) throw error;
       loadComandas();
     } catch (error: any) {
-      alert('Erro ao cancelar comanda: ' + error.message);
+      alert('Erro ao excluir comanda: ' + error.message);
     }
   };
 
