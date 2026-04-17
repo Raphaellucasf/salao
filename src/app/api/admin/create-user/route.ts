@@ -1,13 +1,17 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireAdmin } from '@/lib/api-auth';
 
 /**
  * POST /api/admin/create-user
  * Cria um usuário no Supabase Auth + tabelas users e usuarios.
  * Chamado pela UsuarioModal ao criar novo usuário.
+ * Requer role 'admin'.
  */
 export async function POST(req: NextRequest) {
+  const authCheck = await requireAdmin(req);
+  if (authCheck instanceof NextResponse) return authCheck;
+
   try {
     const body = await req.json();
     const {

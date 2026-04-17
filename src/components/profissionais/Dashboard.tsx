@@ -64,7 +64,7 @@ export default function ProfessionalDashboard() {
   return (
     <div className="min-h-screen bg-neutral-50 pb-20 lg:pb-8">
       {/* Header Mobile */}
-      <div className="lg:hidden bg-gradient-to-br from-accent-500 to-accent-600 text-white p-6 pb-8">
+      <div className="lg:hidden bg-linear-to-br from-accent-500 to-accent-600 text-white p-6 pb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-semibold">Olá, Dimas</h1>
@@ -103,7 +103,7 @@ export default function ProfessionalDashboard() {
       <div className="px-4 lg:px-8 -mt-4 lg:mt-8 max-w-7xl mx-auto">
         {/* Next Appointment Card */}
         {nextAppointment && (
-          <Card className="mb-6 border-accent-200 bg-gradient-to-br from-white to-accent-50/30 shadow-luxury overflow-hidden">
+          <Card className="mb-6 border-accent-200 bg-linear-to-br from-white to-accent-50/30 shadow-luxury overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-accent-500/5 rounded-full -mr-16 -mt-16" />
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -154,7 +154,7 @@ export default function ProfessionalDashboard() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <Card className="shadow-luxury hover:shadow-luxury-hover transition-all cursor-pointer border-0 bg-gradient-to-br from-primary-500 to-primary-600 text-white">
+          <Card className="shadow-luxury hover:shadow-luxury-hover transition-all cursor-pointer border-0 bg-linear-to-br from-primary-500 to-primary-600 text-white">
             <CardContent className="p-4 flex flex-col items-center justify-center text-center min-h-[120px]">
               <ShoppingBag className="w-8 h-8 mb-2" />
               <h3 className="font-semibold">Venda Rápida</h3>
@@ -162,7 +162,7 @@ export default function ProfessionalDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-luxury hover:shadow-luxury-hover transition-all cursor-pointer border-0 bg-gradient-to-br from-green-500 to-green-600 text-white">
+          <Card className="shadow-luxury hover:shadow-luxury-hover transition-all cursor-pointer border-0 bg-linear-to-br from-green-500 to-green-600 text-white">
             <CardContent className="p-4 flex flex-col items-center justify-center text-center min-h-[120px]">
               <TrendingUp className="w-8 h-8 mb-2" />
               <h3 className="font-semibold">Novo Agendamento</h3>

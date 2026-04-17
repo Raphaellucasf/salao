@@ -14,6 +14,8 @@ interface Cliente {
   telefone: string;
   email: string;
   status?: string;
+  cpf?: string;
+  data_nascimento?: string;
 }
 
 interface ClienteModalProps {
@@ -21,15 +23,18 @@ interface ClienteModalProps {
   onClose: () => void;
   cliente?: Cliente | null;
   onSave: () => void;
+  titulo?: string;
 }
 
-export default function ClienteModal({ isOpen, onClose, cliente, onSave }: ClienteModalProps) {
+export default function ClienteModal({ isOpen, onClose, cliente, onSave, titulo }: ClienteModalProps) {
   const formCache = useFormCache<Cliente>('cliente_novo');
   const [formData, setFormData] = useState<Cliente>({
     nome: '',
     telefone: '',
     email: '',
     status: 'ativo',
+    cpf: '',
+    data_nascimento: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +44,7 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave }: Clien
       setFormData(cliente);
     } else {
       const cached = formCache.load();
-      setFormData(cached ?? { nome: '', telefone: '', email: '', status: 'ativo' });
+      setFormData(cached ?? { nome: '', telefone: '', email: '', status: 'ativo', cpf: '', data_nascimento: '' });
     }
     setError('');
   }, [cliente, isOpen]);
@@ -62,8 +67,11 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave }: Clien
           .update({
             nome: formData.nome,
             telefone: formData.telefone,
-            email: formData.email,
+            email: formData.email || null,
             status: formData.status,
+            cpf: formData.cpf || null,
+            data_nascimento: formData.data_nascimento || null,
+            ...(formData.cpf ? { cadastro_completo: true } : {}),
           })
           .eq('id', cliente.id);
 
@@ -93,7 +101,7 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave }: Clien
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={cliente ? 'Editar Cliente' : 'Novo Cliente'}>
+    <Modal isOpen={isOpen} onClose={onClose} title={titulo ?? (cliente ? 'Editar Cliente' : 'Novo Cliente')}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
@@ -112,6 +120,22 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave }: Clien
 
         <div className="grid grid-cols-2 gap-4">
           <Input
+            label="CPF"
+            type="text"
+            value={formData.cpf || ''}
+            onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
+            placeholder="000.000.000-00"
+          />
+          <Input
+            label="Data de Nascimento"
+            type="date"
+            value={formData.data_nascimento || ''}
+            onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Input
             label="Telefone"
             type="tel"
             required
@@ -123,7 +147,6 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave }: Clien
           <Input
             label="Email"
             type="email"
-            required
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             placeholder="cliente@email.com"

@@ -203,7 +203,7 @@ export default function AgendarPage() {
               </Button>
             </Link>
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-linear-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center">
                 <span className="text-white font-bold text-xl">O</span>
               </div>
               <h1 className="text-xl font-bold text-neutral-900">Novo Agendamento</h1>
@@ -259,13 +259,13 @@ export default function AgendarPage() {
                     }`}
                     onClick={() => setSelectedUnit(unit as Unit)}
                   >
-                    <div className="h-48 bg-gradient-to-br from-primary-400 to-primary-600 rounded-t-2xl flex items-center justify-center">
+                    <div className="h-48 bg-linear-to-br from-primary-400 to-primary-600 rounded-t-2xl flex items-center justify-center">
                       <span className="text-white text-6xl font-bold opacity-20">🏢</span>
                     </div>
                     <div className="p-6">
                       <h3 className="font-semibold text-lg mb-2">{unit.name || unit.nome}</h3>
                       <div className="flex items-start space-x-2 text-neutral-600 text-sm">
-                        <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                         <span>{unit.address || 'Endereço não disponível'}</span>
                       </div>
                     </div>
@@ -297,7 +297,7 @@ export default function AgendarPage() {
                     }`}
                     onClick={() => setSelectedProfessional(professional)}
                   >
-                    <div className="w-24 h-24 bg-gradient-to-br from-accent-400 to-accent-600 rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden">
+                    <div className="w-24 h-24 bg-linear-to-br from-accent-400 to-accent-600 rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden">
                       {professional.foto_url ? (
                         <img src={professional.foto_url} alt={professional.nome} className="w-full h-full object-cover" />
                       ) : (
@@ -436,7 +436,7 @@ export default function AgendarPage() {
 
             {confirmError && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                 <p className="text-sm text-red-800">{confirmError}</p>
               </div>
             )}

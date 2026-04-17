@@ -82,7 +82,7 @@ export default function QuickActions() {
         className={`
           fixed bottom-6 right-6 z-50
           w-14 h-14 rounded-full shadow-luxury-hover
-          bg-gradient-to-br from-accent-500 to-accent-600
+          bg-linear-to-br from-accent-500 to-accent-600
           text-neutral-900 font-bold
           flex items-center justify-center
           transition-transform duration-300
@@ -133,7 +133,7 @@ export default function QuickActions() {
                     }}
                     className={`
                       w-12 h-12 rounded-full shadow-luxury
-                      bg-gradient-to-br ${action.color}
+                      bg-linear-to-br ${action.color}
                       text-white flex items-center justify-center
                       transition-transform hover:scale-110 active:scale-95
                     `}

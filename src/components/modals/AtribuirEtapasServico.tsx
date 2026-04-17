@@ -94,7 +94,7 @@ export default function AtribuirEtapasServico({
               className="flex items-center gap-2 p-3 bg-white border border-neutral-200 rounded-lg"
             >
               {/* Número da etapa */}
-              <div className="flex items-center justify-center w-7 h-7 bg-blue-600 text-white rounded-full font-bold text-sm flex-shrink-0">
+              <div className="flex items-center justify-center w-7 h-7 bg-blue-600 text-white rounded-full font-bold text-sm shrink-0">
                 {index + 1}
               </div>
 
@@ -112,7 +112,7 @@ export default function AtribuirEtapasServico({
               </div>
 
               {/* Seletor de profissional/auxiliar */}
-              <div className="flex-shrink-0 w-48">
+              <div className="shrink-0 w-48">
                 {atribuicao.exige_profissional === false ? (
                   <div className="w-full px-2 py-1.5 text-xs text-center border border-dashed border-neutral-300 rounded bg-neutral-50 text-neutral-500">
                     ⏳ Tempo de Pausa

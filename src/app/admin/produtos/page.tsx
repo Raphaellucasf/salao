@@ -258,7 +258,7 @@ function ProdutosPage() {
           <Card className="border-orange-200 bg-orange-50">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <h3 className="font-semibold text-orange-900 mb-2">Alertas de Estoque</h3>
                   <div className="space-y-1">
@@ -320,7 +320,7 @@ function ProdutosPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[300px]">
+              <div className="flex-1 min-w-75">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
                   <input
@@ -506,7 +506,7 @@ function ProdutosPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3 flex-1">
                       <div
-                        className="w-12 h-12 rounded-lg flex-shrink-0"
+                        className="w-12 h-12 rounded-lg shrink-0"
                         style={{ backgroundColor: grupo.cor }}
                       />
                       <div className="flex-1">

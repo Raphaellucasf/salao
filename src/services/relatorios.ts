@@ -31,9 +31,9 @@ export async function buscarFaturamento(periodo: PeriodoFiltro) {
     }
 
     return data.map((t: any) => ({
-      Data: new Date(t.data).toLocaleDateString('pt-BR'),
+      Data: new Date(`${t.data}T00:00:00`).toLocaleDateString('pt-BR'),
       Descrição: t.descricao || 'N/A',
-      Valor: t.valor,
+      Valor: parseFloat(t.valor || 0),
       Pagamento: t.metodo || 'N/A',
       Tipo: t.tipo === 'receita' ? 'Receita' : t.tipo === 'despesa' ? 'Despesa' : 'Comissão',
     }));
@@ -85,7 +85,7 @@ export async function buscarClientes(periodo: PeriodoFiltro) {
           Telefone: cliente.telefone || 'N/A',
           Email: cliente.email || 'N/A',
           'Última Visita': ultimaVisita
-            ? new Date(ultimaVisita.data_agendamento).toLocaleDateString('pt-BR')
+            ? new Date(`${ultimaVisita.data_agendamento}T00:00:00`).toLocaleDateString('pt-BR')
             : 'N/A',
           Visitas: clienteAgendamentos.length,
           Status: 'Ativo',
@@ -158,9 +158,12 @@ export async function buscarServicos(periodo: PeriodoFiltro) {
 // ==================== RELATÓRIO DE PRODUTOS ====================
 export async function buscarProdutos(periodo: PeriodoFiltro) {
   try {
+    // Seleciona ambas as variantes de nome de coluna para compatibilidade
+    // com os dois schemas possíveis: produtos_migration (preco_custo/preco_venda)
+    // e SETUP_COMPLETO (preco/custo)
     const { data, error } = await supabase
       .from('produtos')
-      .select('id, nome, categoria, quantidade, preco_custo, preco_venda')
+      .select('id, nome, categoria, quantidade, preco_custo, preco_venda, preco, custo')
       .order('nome');
 
     if (error) {
@@ -172,17 +175,21 @@ export async function buscarProdutos(periodo: PeriodoFiltro) {
       return [];
     }
 
-    return data.map((produto: any) => ({
-      Produto: produto.nome,
-      Categoria: produto.categoria || 'Geral',
-      'Estoque Atual': produto.quantidade ?? 0,
-      'Preço Custo': produto.preco_custo != null
-        ? produto.preco_custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-        : 'N/A',
-      'Preço Venda': produto.preco_venda != null
-        ? produto.preco_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-        : 'N/A',
-    }));
+    return data.map((produto: any) => {
+      const custoBruto = produto.preco_custo ?? produto.custo ?? null;
+      const vendaBruto = produto.preco_venda ?? produto.preco ?? null;
+      return {
+        Produto: produto.nome,
+        Categoria: produto.categoria || 'Geral',
+        'Estoque Atual': produto.quantidade ?? 0,
+        'Preço Custo': custoBruto != null
+          ? custoBruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          : 'N/A',
+        'Preço Venda': vendaBruto != null
+          ? vendaBruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          : 'N/A',
+      };
+    });
   } catch (error) {
     console.error('Erro ao buscar produtos:', error);
     return [];
@@ -273,7 +280,7 @@ export async function buscarAgenda(periodo: PeriodoFiltro) {
     });
 
     return Object.entries(porData).map(([data, stats]) => ({
-      Data: new Date(data).toLocaleDateString('pt-BR'),
+      Data: new Date(`${data}T00:00:00`).toLocaleDateString('pt-BR'),
       'Agendamentos': stats.total,
       'Realizados': stats.realizados,
       'Cancelados': stats.cancelados,

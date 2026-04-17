@@ -1,5 +1,4 @@
 ﻿'use client';
-// @ts-nocheck
 
 import { useState, useEffect } from 'react';
 import { Package, AlertTriangle, Plus, Search, TrendingUp, ArrowUpRight, ArrowDownRight, Edit, BarChart3, RotateCcw } from 'lucide-react';
@@ -109,6 +108,7 @@ function EstoquePage() {
         onClose={() => setModalOpen(false)}
         produto={selectedProduto}
         onSave={loadProdutos}
+        defaultTipo="uso_interno"
       />
 
       <DesfazerVendaModal
@@ -170,7 +170,7 @@ function EstoquePage() {
       {produtos.filter(p => p.quantidade <= p.minimo).length > 0 && (
         <Card padding="lg" className="border-l-4 border-yellow-500 bg-yellow-50">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
             <div className="flex-1">
               <h3 className="font-semibold text-yellow-900 mb-1">Produtos com Estoque Baixo</h3>
               <p className="text-sm text-yellow-800">
@@ -248,7 +248,7 @@ function EstoquePage() {
                   <tr key={produto.id} className="hover:bg-neutral-50 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-linear-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center">
                           <Package className="w-5 h-5 text-white" />
                         </div>
                         <div>

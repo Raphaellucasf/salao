@@ -180,7 +180,7 @@ export default function CadastrosExcluidosPage() {
       {/* Filtros */}
       <Card className="p-4">
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 min-w-50">
             <Input
               placeholder="Buscar por nome ou motivo..."
               value={search}

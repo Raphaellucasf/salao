@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -15,6 +14,7 @@ interface ProdutoModalProps {
   onClose: () => void;
   produto?: any;
   onSave: () => void;
+  defaultTipo?: 'revenda' | 'uso_interno' | 'insumo';
 }
 
 const TABS = [
@@ -32,7 +32,7 @@ const TIPOS_PRODUTO = [
 
 const UNIDADES_MEDIDA = ['unidade', 'kg', 'g', 'l', 'ml', 'cx', 'pacote', 'par'];
 
-export default function ProdutoModal({ isOpen, onClose, produto, onSave }: ProdutoModalProps) {
+export default function ProdutoModal({ isOpen, onClose, produto, onSave, defaultTipo = 'revenda' }: ProdutoModalProps) {
   const formCache = useFormCache<typeof formData>('produto_novo');
   const [activeTab, setActiveTab] = useState('geral');
   const [loading, setLoading] = useState(false);
@@ -141,7 +141,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave }: Produ
       descricao: '',
       grupo_id: null,
       categoria: '',
-      tipo: 'revenda',
+      tipo: defaultTipo,
       fornecedor_id: null,
       quantidade: 0,
       quantidade_minima: 0,

@@ -12,12 +12,15 @@ import {
   XCircle,
   AlertCircle,
   ClipboardList,
-  Loader2
+  Loader2,
+  UserCheck
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import ClienteModal from '@/components/modals/ClienteModal';
+import { useCadastrosPendentes, PendingCadastro } from '@/hooks/useCadastrosPendentes';
 
 interface Appointment {
   id: string;
@@ -55,6 +58,24 @@ export default function AdminDashboard() {
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [todayActivity, setTodayActivity] = useState<Activity[]>([]);
   const [comissoesMes, setComissoesMes] = useState<ComissaoProfissional[]>([]);
+
+  // T-09: cadastros pendentes
+  const { pending: cadastrosPendentes, reload: reloadPendentes } = useCadastrosPendentes();
+  const [clienteModalOpen, setClienteModalOpen] = useState(false);
+  const [clienteEditando, setClienteEditando] = useState<any>(null);
+
+  const abrirCadastro = (p: PendingCadastro) => {
+    setClienteEditando({
+      id: p.cliente_id,
+      nome: p.cliente_nome,
+      telefone: p.cliente_telefone,
+      email: p.cliente_email,
+      cpf: p.cliente_cpf ?? '',
+      data_nascimento: p.cliente_data_nascimento ?? '',
+      status: 'ativo',
+    });
+    setClienteModalOpen(true);
+  };
 
   useEffect(() => {
     loadDashboard();
@@ -107,14 +128,14 @@ export default function AdminDashboard() {
         { data: proximosData },
         { data: concluidosHojeData },
         { data: novosAgendamentosData },
-        { data: fatMesData },
-        { data: agsMes },
+        fatStatsResp,
+        { data: comissoesMesData },
         { data: profissionaisData },
       ] = await Promise.all([
-        // Todos agendamentos de hoje
+        // Todos agendamentos de hoje (contagem)
         supabase
           .from('agendamentos')
-          .select('id, status, valor_total, concluido_em')
+          .select('id')
           .eq('data_agendamento', hoje),
 
         // Novos clientes criados hoje
@@ -133,13 +154,13 @@ export default function AdminDashboard() {
           .order('hora_inicio', { ascending: true })
           .limit(5),
 
-        // Agendamentos concluídos hoje (para atividade)
-        (supabase as any)
-          .from('vw_agendamentos_completos')
-          .select('id, cliente_nome, profissional_nome, concluido_em')
-          .eq('data_agendamento', hoje)
-          .eq('status', 'concluido')
-          .order('concluido_em', { ascending: false })
+        // Comandas fechadas hoje (atividade de serviços concluídos)
+        supabase
+          .from('comandas')
+          .select('id, numero_comanda, cliente_nome, data_fechamento')
+          .eq('status', 'fechada')
+          .gte('data_fechamento', `${hoje}T00:00:00`)
+          .order('data_fechamento', { ascending: false })
           .limit(3),
 
         // Agendamentos criados hoje (para atividade)
@@ -150,19 +171,14 @@ export default function AdminDashboard() {
           .order('created_at', { ascending: false })
           .limit(3),
 
-        // Faturamento do mês
-        supabase
-          .from('agendamentos')
-          .select('valor_total')
-          .eq('status', 'concluido')
-          .gte('data_agendamento', inicioMes),
+        // Faturamento hoje e do mês — via API route (service_role bypassa RLS)
+        fetch(`/api/admin/financeiro-stats?hoje=${hoje}&inicioMes=${inicioMes}`),
 
-        // Agendamentos do mês por profissional (comissões)
-        supabase
-          .from('agendamentos')
-          .select('profissional_id, valor_total')
-          .eq('status', 'concluido')
-          .gte('data_agendamento', inicioMes),
+        // Comissões do mês — tabela comissoes (populada ao fechar comanda)
+        (supabase as any)
+          .from('comissoes')
+          .select('profissional_id, valor_comissao')
+          .gte('criado_em', `${inicioMes}T00:00:00`),
 
         // Lista de profissionais ativos
         supabase
@@ -172,27 +188,24 @@ export default function AdminDashboard() {
       ]);
 
       // Stats
-      const lista = agendamentosData || [];
-      setAgendamentosHoje(lista.length);
-
+      setAgendamentosHoje((agendamentosData || []).length);
       setNovosClientesHoje((clientesData || []).length);
       setUpcomingAppointments(proximosData || []);
 
-      // Faturamento hoje (de agendamentos)
-      const fatHoje = lista
-        .filter((a: any) => a.status === 'concluido' && a.valor_total)
-        .reduce((acc: number, a: any) => acc + parseFloat(a.valor_total || 0), 0);
-      setFaturamentoHoje(fatHoje);
+      // Faturamento hoje e do mês — via API route (service_role)
+      const fatStats = fatStatsResp.ok ? await fatStatsResp.json() : { faturamentoHoje: 0, faturamentoMes: 0 };
+      setFaturamentoHoje(fatStats.faturamentoHoje ?? 0);
+      setFaturamentoMes(fatStats.faturamentoMes ?? 0);
 
       // Montar atividades reais
       const activities: Activity[] = [];
 
-      (concluidosHojeData || []).forEach((a: any) => {
-        if (a.concluido_em) {
-          const hora = new Date(a.concluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      (concluidosHojeData || []).forEach((c: any) => {
+        if (c.data_fechamento) {
+          const hora = new Date(c.data_fechamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
           activities.push({
-            id: `concluido-${a.id}`,
-            text: `${a.profissional_nome || 'Profissional'} concluiu atendimento de ${a.cliente_nome}`,
+            id: `comanda-${c.id}`,
+            text: `Atendimento concluído — ${c.cliente_nome || 'Cliente'} (Comanda #${c.numero_comanda})`,
             time: hora,
             type: 'success',
           });
@@ -214,34 +227,29 @@ export default function AdminDashboard() {
       activities.sort((a, b) => b.time.localeCompare(a.time));
       setTodayActivity(activities.slice(0, 6));
 
-      // Faturamento do mês (já carregado em paralelo)
-      const fatMes = (fatMesData || []).reduce(
-        (acc: number, a: any) => acc + parseFloat(a.valor_total || 0), 0
-      );
-      setFaturamentoMes(fatMes);
+      // Ranking de comissões do mês (tabela comissoes)
+      const profMap: Record<string, string> = {};
+      (profissionaisData || []).forEach((p: any) => {
+        profMap[p.id] = p.nome;
+      });
 
-      // Comissões por profissional no mês (já carregadas em paralelo)
-
-      const nomesMap: Record<string, string> = {};
-      (profissionaisData || []).forEach((p: any) => { nomesMap[p.id] = p.nome; });
-
-      const comissoesMap: Record<string, { atendimentos: number; faturamento: number }> = {};
-      (agsMes || []).forEach((ag: any) => {
-        if (!ag.profissional_id) return;
-        if (!comissoesMap[ag.profissional_id]) {
-          comissoesMap[ag.profissional_id] = { atendimentos: 0, faturamento: 0 };
+      const comissoesMap: Record<string, { valor: number; count: number }> = {};
+      (comissoesMesData || []).forEach((c: any) => {
+        if (!c.profissional_id) return;
+        if (!comissoesMap[c.profissional_id]) {
+          comissoesMap[c.profissional_id] = { valor: 0, count: 0 };
         }
-        comissoesMap[ag.profissional_id].atendimentos += 1;
-        comissoesMap[ag.profissional_id].faturamento += parseFloat(ag.valor_total || 0);
+        comissoesMap[c.profissional_id].valor += parseFloat(c.valor_comissao || 0);
+        comissoesMap[c.profissional_id].count += 1;
       });
 
       const ranking = Object.entries(comissoesMap)
         .map(([id, val]) => ({
           profissional_id: id,
-          nome: nomesMap[id] || 'Profissional',
-          atendimentos: val.atendimentos,
-          faturamento: val.faturamento,
-          comissao: val.faturamento * 0.5,
+          nome: profMap[id] || 'Profissional',
+          atendimentos: val.count,
+          faturamento: 0,
+          comissao: val.valor,
         }))
         .sort((a, b) => b.comissao - a.comissao);
 
@@ -308,6 +316,14 @@ export default function AdminDashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      <ClienteModal
+        isOpen={clienteModalOpen}
+        onClose={() => { setClienteModalOpen(false); setClienteEditando(null); }}
+        cliente={clienteEditando}
+        titulo="Completar Cadastro"
+        onSave={() => { setClienteModalOpen(false); setClienteEditando(null); reloadPendentes(); }}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -389,6 +405,39 @@ export default function AdminDashboard() {
         </Link>
       </div>
 
+      {/* T-09: Cadastros Pendentes Hoje */}
+      {cadastrosPendentes.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
+              <UserCheck className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-amber-900">Cadastros Pendentes Hoje</h3>
+              <p className="text-xs text-amber-700">
+                {cadastrosPendentes.length} cliente{cadastrosPendentes.length !== 1 ? 's' : ''} com cadastro incompleto agendado{cadastrosPendentes.length !== 1 ? 's' : ''} hoje
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {cadastrosPendentes.map((p) => (
+              <div key={p.agendamento_id} className="flex items-center justify-between bg-white rounded-lg px-4 py-2.5 border border-amber-100">
+                <div>
+                  <p className="text-sm font-medium text-neutral-900">{p.cliente_nome}</p>
+                  <p className="text-xs text-neutral-500">{p.hora_inicio?.slice(0, 5)}{p.cliente_telefone ? ` — ${p.cliente_telefone}` : ''}</p>
+                </div>
+                <button
+                  onClick={() => abrirCadastro(p)}
+                  className="text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Completar Cadastro
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Próximos Agendamentos */}
@@ -416,8 +465,8 @@ export default function AdminDashboard() {
                     className="flex items-center justify-between p-4 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center">
+                      <div className="shrink-0">
+                        <div className="w-12 h-12 bg-linear-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center">
                           <span className="text-white font-bold text-sm">
                             {apt.cliente_nome?.charAt(0) || '?'}
                           </span>
@@ -460,7 +509,7 @@ export default function AdminDashboard() {
             <div className="space-y-4">
               {todayActivity.map((activity) => (
                 <div key={activity.id} className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 mt-0.5">
+                  <div className="shrink-0 mt-0.5">
                     {getActivityIcon(activity.type)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -484,7 +533,7 @@ export default function AdminDashboard() {
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : agendamentosHoje}
               </p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Calendar className="w-6 h-6 text-white" />
             </div>
           </div>
@@ -499,7 +548,7 @@ export default function AdminDashboard() {
               </p>
               <p className="text-xs text-neutral-500 mt-1">Serviços concluídos</p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-green-500 to-green-600 flex items-center justify-center">
               <DollarSign className="w-6 h-6 text-white" />
             </div>
           </div>
@@ -513,7 +562,7 @@ export default function AdminDashboard() {
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : novosClientesHoje}
               </p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-purple-500 to-purple-600 flex items-center justify-center">
               <Users className="w-6 h-6 text-white" />
             </div>
           </div>
@@ -527,7 +576,7 @@ export default function AdminDashboard() {
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(faturamentoMes)}
               </p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-accent-500 to-accent-600 flex items-center justify-center">
               <TrendingUp className="w-6 h-6 text-white" />
             </div>
           </div>
@@ -539,13 +588,12 @@ export default function AdminDashboard() {
         <Card padding="lg">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-neutral-900">Comissões do Mês</h2>
-            <span className="text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded">estimativa 50%</span>
           </div>
           <div className="space-y-3">
             {comissoesMes.map((prof, i) => (
               <div key={prof.profissional_id} className="flex items-center gap-4">
                 <span className="w-6 text-sm font-bold text-neutral-400">{i + 1}</span>
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-linear-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                   {prof.nome.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -554,7 +602,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-green-600">{formatCurrency(prof.comissao)}</p>
-                  <p className="text-xs text-neutral-400">{formatCurrency(prof.faturamento)} fat.</p>
+                  <p className="text-xs text-neutral-400">{prof.atendimentos} atend.</p>
                 </div>
               </div>
             ))}

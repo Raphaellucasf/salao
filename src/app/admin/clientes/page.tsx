@@ -183,7 +183,7 @@ export default function ClientesPage() {
                   <tr key={cliente.id} className="hover:bg-neutral-50 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-accent-400 to-accent-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        <div className="w-10 h-10 bg-linear-to-br from-accent-400 to-accent-600 rounded-full flex items-center justify-center text-white font-semibold">
                           {cliente.nome.charAt(0)}
                         </div>
                         <div>

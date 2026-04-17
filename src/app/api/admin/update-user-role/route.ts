@@ -1,13 +1,17 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireAdmin } from '@/lib/api-auth';
 
 /**
  * PATCH /api/admin/update-user-role
  * Atualiza o role de um usuário existente no Supabase Auth + tabela users.
  * Chamado pela UsuarioModal ao salvar edição de role.
+ * Requer role 'admin'.
  */
 export async function PATCH(req: NextRequest) {
+  const authCheck = await requireAdmin(req);
+  if (authCheck instanceof NextResponse) return authCheck;
+
   try {
     const body = await req.json();
     const {

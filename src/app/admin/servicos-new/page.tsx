@@ -270,7 +270,7 @@ function ServicosNewPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[300px]">
+              <div className="flex-1 min-w-75">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
                   <input

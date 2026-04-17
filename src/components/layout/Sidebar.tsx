@@ -55,7 +55,7 @@ export default function Sidebar({ userRole = 'admin' }: SidebarProps) {
         <div className="flex items-center justify-between p-6 border-b border-neutral-200">
           {!isCollapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-primary-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-linear-to-br from-accent-500 to-primary-600 rounded-lg flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -117,7 +117,7 @@ export default function Sidebar({ userRole = 'admin' }: SidebarProps) {
               isCollapsed ? 'justify-center' : ''
             }`}
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white text-sm font-medium">
+            <div className="w-8 h-8 rounded-full bg-linear-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white text-sm font-medium">
               D
             </div>
             {!isCollapsed && (

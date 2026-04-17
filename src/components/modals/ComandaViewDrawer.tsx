@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DEFAULT_UNIT_ID } from '@/services/caixa';
+import { toast } from 'sonner';
 
 interface ComandaViewDrawerProps {
   isOpen: boolean;
@@ -227,11 +228,14 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
   };
 
   const fecharComanda = async () => {
-    if (!comanda || comanda.status !== 'aberta') return;
+    console.log('[fecharComanda] INÍCIO — status:', comanda?.status, 'id:', comanda?.id);
+    if (!comanda || comanda.status !== 'aberta') {
+      console.warn('[fecharComanda] SAINDO CEDO — comanda ausente ou status não é aberta:', comanda?.status);
+      return;
+    }
     try {
       setFechandoComanda(true);
 
-      // T-07: montar payload de update com auditoria de desconto e fechado_por
       const descontoNum = Math.max(0, Number(desconto) || 0);
       const updatePayload: Record<string, any> = {
         status: 'fechada',
@@ -245,53 +249,71 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
         updatePayload.total = Math.max(0, (Number(comanda.subtotal) || 0) - descontoNum);
       }
 
+      console.log('[fecharComanda] Chamando supabase.update …');
       const { error: cmdError } = await supabase
         .from('comandas')
         .update(updatePayload)
         .eq('id', comanda.id);
 
-      if (cmdError) throw cmdError;
-
-      // T-07: persistir comissões em tabela comissoes
-      if (comissoes.length > 0 && user?.id) {
-        const rows = comissoes
-          .filter((c) => c.valor >= 0)
-          .map((c) => ({
-            comanda_id: comanda.id,
-            profissional_id: c.profissional_id,
-            valor_comissao: c.valor,
-            criado_por: user.id,
-          }));
-        if (rows.length > 0) {
-          await (supabase as any).from('comissoes').insert(rows);
-        }
+      console.log('[fecharComanda] update retornou — cmdError:', cmdError);
+      if (cmdError) {
+        console.error('[fecharComanda] cmdError LANÇADO:', cmdError);
+        throw cmdError;
       }
 
-      const totalFinal = descontoNum > 0
-        ? Math.max(0, (Number(comanda.subtotal) || 0) - descontoNum)
-        : (comanda.total || 0);
-
-      const hoje = new Date().toISOString().split('T')[0];
-      const { error: transError } = await supabase
-        .from('transacoes')
-        .insert([{
-          tipo: 'receita',
-          descricao: `Comanda #${comanda.numero_comanda} — ${comanda.cliente_nome || 'Cliente'}`,
-          categoria: 'Serviços',
-          valor: totalFinal,
-          metodo: metodoPagamento,
-          data: hoje,
-        }]);
-
-      if (transError) throw transError;
-
-      // Observação: o estoque de produtos já foi debitado quando a comanda foi criada
-      // (ComandaModal.movimentarEstoque). Aqui apenas registramos a movimentação de fechamento.
-      const itensProduto = (comanda.comanda_itens || []).filter(
-        (item: any) => item.tipo === 'produto' && item.item_id
+      // Calcular total final
+      const itemsTotal = (comanda.comanda_itens || []).reduce(
+        (sum: number, item: any) => sum + Number(item.valor_total || 0), 0,
       );
-      for (const item of itensProduto) {
-        try {
+      const baseTotal = Number(comanda.subtotal || comanda.total || itemsTotal) || 0;
+      const totalFinal = descontoNum > 0 ? Math.max(0, baseTotal - descontoNum) : baseTotal;
+
+      // PASSO CRÍTICO: registrar transação financeira IMEDIATAMENTE após fechar comanda
+      console.log('[fecharComanda] totalFinal calculado:', totalFinal, '— chamando fetch …');
+      const hoje = new Date().toISOString().split('T')[0];
+      const transResp = await fetch('/api/admin/fechar-comanda', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comanda_id: comanda.id,
+          metodo_pagamento: metodoPagamento,
+          descricao: `Comanda #${comanda.numero_comanda}${comanda.cliente_nome ? ' — ' + comanda.cliente_nome : ''}`,
+          valor: totalFinal,
+          data: hoje,
+        }),
+      });
+      if (!transResp.ok) {
+        const transBody = await transResp.json().catch(() => ({}));
+        console.error('[fecharComanda] transResp não ok:', transResp.status, transBody);
+        throw new Error(transBody.error || `Erro HTTP ${transResp.status} ao registrar transação`);
+      }
+      console.log('[fecharComanda] transação registrada com sucesso');
+
+      // Comissões — em try/catch isolado para não bloquear o fechamento
+      try {
+        if (comissoes.length > 0 && user?.id) {
+          const rows = comissoes
+            .filter((c) => c.valor >= 0)
+            .map((c) => ({
+              comanda_id: comanda.id,
+              profissional_id: c.profissional_id,
+              valor_comissao: c.valor,
+              criado_por: user.id,
+            }));
+          if (rows.length > 0) {
+            await (supabase as any).from('comissoes').insert(rows);
+          }
+        }
+      } catch {
+        // Comissões não bloqueiam o fechamento
+      }
+
+      // Estoque — em try/catch isolado
+      try {
+        const itensProduto = (comanda.comanda_itens || []).filter(
+          (item: any) => item.tipo === 'produto' && item.item_id
+        );
+        for (const item of itensProduto) {
           const { data: prod } = await supabase
             .from('produtos')
             .select('quantidade')
@@ -309,37 +331,28 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
               motivo: `Fechamento Comanda #${comanda.numero_comanda}`,
             }]);
           }
-        } catch {
-          // Ignora se tabela estoque_movimentacoes não existir
         }
+      } catch {
+        // Ignora se tabela estoque_movimentacoes não existir
       }
 
-      // FIX: registrar pacotes pré-pagos em pacotes_cliente ao fechar comanda
-      const itensPacote = (comanda.comanda_itens || []).filter(
-        (item: any) => item.tipo === 'pacote' && item.item_id,
-      );
-      if (itensPacote.length > 0 && comanda.cliente?.cpf) {
-        for (const item of itensPacote) {
-          try {
+      // Pacotes pré-pagos — em try/catch isolado
+      try {
+        const itensPacote = (comanda.comanda_itens || []).filter(
+          (item: any) => item.tipo === 'pacote' && item.item_id,
+        );
+        if (itensPacote.length > 0 && comanda.cliente?.cpf) {
+          for (const item of itensPacote) {
             const [{ data: pacoteServicos }, { data: pacoteData }] = await Promise.all([
-              supabase
-                .from('pacotes_servicos_itens')
-                .select('servico_id, quantidade')
-                .eq('pacote_id', item.item_id),
-              supabase
-                .from('pacotes_servicos')
-                .select('validade_dias')
-                .eq('id', item.item_id)
-                .single(),
+              supabase.from('pacotes_servicos_itens' as any).select('servico_id, quantidade').eq('pacote_id', item.item_id),
+              supabase.from('pacotes_servicos' as any).select('validade_dias').eq('id', item.item_id).single(),
             ]);
-            if (!pacoteServicos || pacoteServicos.length === 0) continue;
-
+            if (!pacoteServicos || (pacoteServicos as any[]).length === 0) continue;
             const validadeDias: number | null = (pacoteData as any)?.validade_dias ?? null;
             const dataValidade = validadeDias
               ? new Date(Date.now() + validadeDias * 86_400_000).toISOString().split('T')[0]
               : null;
-
-            const rows = (pacoteServicos as any[]).map((ps: any) => ({
+            const pkRows = (pacoteServicos as any[]).map((ps: any) => ({
               unit_id: DEFAULT_UNIT_ID,
               cliente_cpf: comanda.cliente.cpf,
               servico_id: ps.servico_id,
@@ -348,16 +361,18 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
               comanda_origem_id: comanda.id,
               data_validade: dataValidade,
             }));
-            await (supabase as any).from('pacotes_cliente').insert(rows);
-          } catch {
-            // não bloqueia o fechamento
+            await (supabase as any).from('pacotes_cliente').insert(pkRows);
           }
         }
+      } catch {
+        // Pacotes não bloqueiam o fechamento
       }
 
+      toast.success(`Comanda #${comanda.numero_comanda} fechada com sucesso!`);
       await loadComanda();
-    } catch (err) {
-      console.error('Erro ao fechar comanda:', err);
+    } catch (err: any) {
+      console.error('[fecharComanda] ERRO CAPTURADO:', err?.message, err);
+      toast.error(`Erro ao fechar comanda: ${err?.message || 'Tente novamente'}`);
     } finally {
       setFechandoComanda(false);
     }

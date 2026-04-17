@@ -172,11 +172,27 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
 
       let pacoteId = pacote?.id;
 
+      // Calcular inline para evitar closure stale
+      const duracaoCalc = servicosSelecionados.reduce(
+        (s: number, item: any) => s + (Number(item.servico?.duracao_minutos) || 0) * (Number(item.quantidade) || 1),
+        0,
+      );
+      const precoCalc = servicosSelecionados.reduce(
+        (s: number, item: any) => s + (Number(item.servico?.preco) || 0) * (Number(item.quantidade) || 1),
+        0,
+      );
+
+      const pacotePayload = {
+        ...formData,
+        duracao_total_minutos: duracaoCalc > 0 ? duracaoCalc : 1,
+        preco_original: precoCalc,
+      };
+
       if (pacoteId) {
         // Update pacote
         const { error: updateError } = await supabase
           .from('pacotes_servicos')
-          .update(formData as any)
+          .update(pacotePayload as any)
           .eq('id', pacoteId);
 
         if (updateError) throw updateError;
@@ -190,7 +206,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
         // Insert pacote
         const { data, error: insertError } = await supabase
           .from('pacotes_servicos')
-          .insert([formData as any])
+          .insert([pacotePayload as any])
           .select()
           .single();
 

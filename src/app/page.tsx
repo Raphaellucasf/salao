@@ -13,7 +13,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-linear-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center">
                 <span className="text-white font-bold text-xl">O</span>
               </div>
               <h1 className="text-xl font-bold text-neutral-900">Otimiza Beauty</h1>
@@ -29,7 +29,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-accent-500 via-accent-600 to-primary-700 text-neutral-900 py-16 px-4">
+      <section className="bg-linear-to-br from-accent-500 via-accent-600 to-primary-700 text-neutral-900 py-16 px-4">
         <div className="container mx-auto text-center max-w-4xl">
           <h2 className="text-4xl md:text-5xl font-bold mb-4 text-neutral-900">
             Beleza que se Agenda Online

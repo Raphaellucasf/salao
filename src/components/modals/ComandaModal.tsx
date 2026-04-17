@@ -439,6 +439,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             auxiliar_id: formData.auxiliar_id || null,
             data_agendamento: formData.data_agendamento || null,
             hora_inicio: formData.hora_inicio || null,
+            subtotal: total,
             total,
             observacoes: formData.observacoes,
           })
@@ -555,6 +556,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             data_agendamento: formData.data_agendamento || null,
             hora_inicio: formData.hora_inicio || null,
             status: 'aberta',
+            subtotal: total,
             total,
             observacoes: formData.observacoes,
           }])

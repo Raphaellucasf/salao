@@ -213,7 +213,7 @@ export default function AnamnesePage() {
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4 flex-1">
-                      <div className={`w-12 h-12 ${tipoInfo?.color} rounded-lg flex items-center justify-center text-2xl flex-shrink-0`}>
+                      <div className={`w-12 h-12 ${tipoInfo?.color} rounded-lg flex items-center justify-center text-2xl shrink-0`}>
                         {tipoInfo?.icon}
                       </div>
                       <div className="flex-1">

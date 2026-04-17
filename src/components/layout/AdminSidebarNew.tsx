@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
+import { useCadastrosPendentes } from '@/hooks/useCadastrosPendentes';
 
 interface SidebarItem {
   name: string;
@@ -48,6 +49,7 @@ export default function AdminSidebarNew() {
   const pathname = usePathname();
   const { user, signOut, isAdmin } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { count: pendentesCount } = useCadastrosPendentes();
 
   const visibleItems = sidebarItems.filter(item => !item.adminOnly || isAdmin);
 
@@ -63,7 +65,7 @@ export default function AdminSidebarNew() {
       <div className="h-16 flex items-center justify-between px-4 border-b border-neutral-200">
         {!isCollapsed && (
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-linear-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -89,7 +91,7 @@ export default function AdminSidebarNew() {
       {!isCollapsed && (
         <div className="p-4 border-b border-neutral-200">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-linear-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center">
               <span className="text-white font-semibold text-sm">
                 {user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'A'}
               </span>
@@ -117,7 +119,7 @@ export default function AdminSidebarNew() {
               key={item.href}
               href={item.href}
               className={`
-                flex items-center px-3 py-2.5 rounded-lg
+                flex items-center px-3 py-2.5 rounded-lg relative
                 transition-all duration-200
                 ${isActive 
                   ? 'bg-accent-500 text-neutral-900 font-medium shadow-md' 
@@ -127,8 +129,16 @@ export default function AdminSidebarNew() {
               `}
               title={isCollapsed ? item.name : undefined}
             >
-              <Icon className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} flex-shrink-0`} />
-              {!isCollapsed && <span className="text-sm">{item.name}</span>}
+              <Icon className={`${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} shrink-0`} />
+              {!isCollapsed && <span className="text-sm flex-1">{item.name}</span>}
+              {!isCollapsed && item.href === '/admin/agenda' && pendentesCount > 0 && (
+                <span className="text-xs font-bold bg-amber-500 text-white rounded-full px-1.5 min-w-5 text-center leading-5">
+                  {pendentesCount}
+                </span>
+              )}
+              {isCollapsed && item.href === '/admin/agenda' && pendentesCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-white" />
+              )}
             </Link>
           );
         })}

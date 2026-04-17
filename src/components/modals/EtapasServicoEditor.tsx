@@ -176,7 +176,7 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
                     id={`exige_profissional_${index}`}
                     checked={etapa.exige_profissional === false}
                     onChange={(e) => atualizarEtapa(index, 'exige_profissional', !e.target.checked)}
-                    className="flex-shrink-0 mr-2"
+                    className="shrink-0 mr-2"
                   />
                   <label htmlFor={`exige_profissional_${index}`} className="text-sm text-neutral-700 cursor-pointer select-none truncate">
                     Não exige presença
@@ -193,7 +193,7 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
                     checked={etapa.pode_ter_auxiliar}
                     onChange={(e) => atualizarEtapa(index, 'pode_ter_auxiliar', e.target.checked)}
                     disabled={etapa.exige_profissional === false}
-                    className="flex-shrink-0 mr-2 disabled:opacity-50"
+                    className="shrink-0 mr-2 disabled:opacity-50"
                   />
                   <label htmlFor={`auxiliar_${index}`} className="text-sm text-neutral-700 cursor-pointer select-none truncate">
                     Pode ter auxiliar
@@ -215,7 +215,7 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
 
       {/* Resumo */}
       {etapas.length > 0 && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-neutral-600 mb-1">Total de etapas</p>

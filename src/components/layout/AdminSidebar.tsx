@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui';
+import { useCadastrosPendentes } from '@/hooks/useCadastrosPendentes';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ interface SidebarProps {
 export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
   const { user, role, signOut, isAdmin } = useAuth();
   const pathname = usePathname();
+  const { count: pendentesCount } = useCadastrosPendentes();
 
   const menuItems = [
     { href: '/admin/dashboard', icon: Home, label: 'Dashboard', adminOnly: false },
@@ -53,7 +55,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
       {/* Logo */}
       <div className="p-4 border-b border-neutral-200">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 bg-linear-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center shrink-0">
             <span className="text-white font-bold text-xl">O</span>
           </div>
           {isOpen && (
@@ -78,14 +80,22 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
           return (
             <Link key={item.href} href={item.href}>
               <button
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors relative ${
                   active
                     ? 'bg-primary-50 text-primary-600 font-medium'
                     : 'text-neutral-700 hover:bg-neutral-100'
                 }`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {isOpen && <span className="truncate">{item.label}</span>}
+                <Icon className="w-5 h-5 shrink-0" />
+                {isOpen && <span className="truncate flex-1 text-left">{item.label}</span>}
+                {isOpen && item.href === '/admin/agenda' && pendentesCount > 0 && (
+                  <span className="text-xs font-bold bg-amber-500 text-white rounded-full px-1.5 min-w-5 text-center leading-5">
+                    {pendentesCount}
+                  </span>
+                )}
+                {!isOpen && item.href === '/admin/agenda' && pendentesCount > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full" />
+                )}
               </button>
             </Link>
           );
@@ -97,7 +107,7 @@ export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
         {isOpen ? (
           <div className="space-y-3">
             <div className="flex items-center space-x-3 px-2">
-              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center shrink-0">
                 <span className="text-white font-semibold text-sm">
                   {user?.email?.charAt(0).toUpperCase()}
                 </span>

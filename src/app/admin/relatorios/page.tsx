@@ -476,7 +476,7 @@ function RelatoriosPage() {
       {/* Banner: dados de demonstração */}
       {Object.values(origemDadosCache).some(o => o === 'exemplo') && (
         <div className="bg-yellow-50 border border-yellow-400 rounded-xl p-4 flex items-start gap-3">
-          <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-0.5" size={20} />
+          <AlertTriangle className="text-yellow-600 shrink-0 mt-0.5" size={20} />
           <div>
             <p className="font-semibold text-yellow-900">Atenção: dados de demonstração ativos</p>
             <p className="text-sm text-yellow-800 mt-1">
@@ -499,7 +499,7 @@ function RelatoriosPage() {
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow cursor-pointer"
               >
                 <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 ${relatorio.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                  <div className={`w-12 h-12 ${relatorio.color} rounded-lg flex items-center justify-center shrink-0`}>
                     <Icon size={24} className="text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -559,7 +559,7 @@ function RelatoriosPage() {
       {/* Informação sobre Exportação */}
       <div className="bg-green-50 border border-green-200 rounded-xl p-6">
         <div className="flex items-start gap-3">
-          <Download className="text-green-600 flex-shrink-0 mt-1" size={24} />
+          <Download className="text-green-600 shrink-0 mt-1" size={24} />
           <div>
             <h3 className="font-semibold text-green-900 mb-1">Sistema de Relatórios Completo!</h3>
             <p className="text-sm text-green-700 mb-2">

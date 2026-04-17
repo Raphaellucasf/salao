@@ -8,6 +8,7 @@ import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { supabase } from '@/lib/supabase';
+import { X as XIcon } from 'lucide-react';
 
 interface ProfissionalModalProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
   const formCache = useFormCache<typeof formData>('profissional_novo');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [apelidoInput, setApelidoInput] = useState('');
   const [gruposDB, setGruposDB] = useState<GrupoServico[]>([]);
   const [servicosPorGrupo, setServicosPorGrupo] = useState<Record<string, ServicoItem[]>>({});
   const [gruposExpandidos, setGruposExpandidos] = useState<Set<string>>(new Set());
@@ -84,6 +86,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     email: '',
     telefone: '',
     cpf: '',
+    apelido: [] as string[],
     data_nascimento: '',
     endereco: '',
     cidade: '',
@@ -121,6 +124,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           email: profissional.email || '',
           telefone: profissional.telefone || '',
           cpf: profissional.cpf || '',
+          apelido: profissional.apelido ? profissional.apelido.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
           data_nascimento: profissional.data_nascimento || '',
           endereco: profissional.endereco || '',
           cidade: profissional.cidade || '',
@@ -157,6 +161,23 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
           ativo: profissional.ativo !== false,
           observacoes: profissional.observacoes || '',
         });
+        // Busca apelido e grupos frescos do Supabase — state local pode estar desatualizado
+        if (profissional.id) {
+          supabase
+            .from('profissionais')
+            .select('apelido, grupos')
+            .eq('id', profissional.id)
+            .single()
+            .then(({ data: fresh }) => {
+              if (fresh) {
+                setFormData(prev => ({
+                  ...prev,
+                  apelido: fresh.apelido ? fresh.apelido.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+                  grupos: Array.isArray(fresh.grupos) ? fresh.grupos : (fresh.grupos || []),
+                }));
+              }
+            });
+        }
       } else {
         const cached = formCache.load();
         if (cached) {
@@ -181,6 +202,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
       email: '',
       telefone: '',
       cpf: '',
+      apelido: [],
       data_nascimento: '',
       endereco: '',
       cidade: '',
@@ -289,16 +311,12 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
     }
 
     try {
-      // Mapeia nomes dos grupos selecionados para seus UUIDs
-      const gruposSelecionadosIds = formData.grupos
-        .map(nome => gruposDB.find(g => g.nome === nome)?.id)
-        .filter(Boolean);
-
       const dataToSave = {
         nome: formData.nome,
         email: formData.email,
         telefone: formData.telefone || null,
         cpf: formData.cpf || null,
+        apelido: formData.apelido.length > 0 ? formData.apelido.join(', ') : null,
         data_nascimento: formData.data_nascimento || null,
         endereco: formData.endereco || null,
         cidade: formData.cidade || null,
@@ -310,7 +328,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
         salario_fixo: formData.tem_salario_fixo ? formData.salario_fixo : null,
         recebe_comissao: formData.recebe_comissao,
         percentual_comissao: formData.recebe_comissao ? formData.percentual_comissao : null,
-        grupos_ids: gruposSelecionadosIds, // Envia os UUIDs dos grupos
+        grupos: formData.grupos, // array de nomes dos grupos (coluna jsonb)
         servicos_habilitados: formData.servicos_habilitados,
         comissoes_por_grupo: formData.comissoes_por_grupo,
         dias_trabalho: formData.dias_trabalho,
@@ -416,6 +434,55 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
               onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
               placeholder="00000-000"
             />
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Apelido(s)</label>
+            <div className="flex flex-wrap gap-1.5 p-2 border border-neutral-300 rounded-lg min-h-[42px] focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-primary-500">
+              {formData.apelido.map((ap, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-100 text-primary-800 rounded-full text-sm font-medium"
+                >
+                  {ap}
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, apelido: formData.apelido.filter((_, j) => j !== i) })}
+                    className="hover:text-primary-600 focus:outline-none"
+                    aria-label={`Remover ${ap}`}
+                  >
+                    <XIcon className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={apelidoInput}
+                onChange={(e) => setApelidoInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ',') && apelidoInput.trim()) {
+                    e.preventDefault();
+                    const novo = apelidoInput.trim().replace(/,$/, '');
+                    if (novo && !formData.apelido.includes(novo)) {
+                      setFormData({ ...formData, apelido: [...formData.apelido, novo] });
+                    }
+                    setApelidoInput('');
+                  } else if (e.key === 'Backspace' && !apelidoInput && formData.apelido.length > 0) {
+                    setFormData({ ...formData, apelido: formData.apelido.slice(0, -1) });
+                  }
+                }}
+                onBlur={() => {
+                  const novo = apelidoInput.trim().replace(/,$/, '');
+                  if (novo && !formData.apelido.includes(novo)) {
+                    setFormData({ ...formData, apelido: [...formData.apelido, novo] });
+                    setApelidoInput('');
+                  }
+                }}
+                placeholder={formData.apelido.length === 0 ? 'Ex: Di, Dimas, Dimi...' : ''}
+                className="flex-1 min-w-28 outline-none text-sm bg-transparent"
+              />
+            </div>
+            <p className="text-xs text-neutral-500 mt-1">Nomes pelos quais o profissional é conhecido. Digite e pressione Enter ou vírgula para adicionar.</p>
           </div>
 
           <div className="grid grid-cols-3 gap-4 mt-4">
@@ -589,7 +656,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
                       />
                       {grupo.cor && (
                         <span
-                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          className="w-3 h-3 rounded-full shrink-0"
                           style={{ backgroundColor: grupo.cor }}
                         />
                       )}

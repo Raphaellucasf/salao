@@ -72,6 +72,17 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
       // Sempre tenta carregar etapas ao editar (se houver ID)
       if (servico.id) {
         carregarEtapas(servico.id);
+        // Busca termos_busca fresco do Supabase — o state local pode estar desatualizado
+        supabase
+          .from('servicos')
+          .select('termos_busca')
+          .eq('id', servico.id)
+          .single()
+          .then(({ data: fresh }) => {
+            if (fresh) {
+              setTermosBusca(Array.isArray(fresh.termos_busca) ? fresh.termos_busca : []);
+            }
+          });
       } else {
         setEtapas([]);
         setTemEtapas(false);
@@ -156,6 +167,12 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     try {
       setLoading(true);
 
+      // Garante que qualquer termo ainda no input seja incluído antes de salvar
+      const termoPendente = termoInput.trim().replace(/,$/, '');
+      const termosFinais = termoPendente && !termosBusca.includes(termoPendente)
+        ? [...termosBusca, termoPendente]
+        : termosBusca;
+
       const duracaoFinal = (temEtapas && duracaoCalculada) 
         ? etapas.reduce((total, etapa) => total + (etapa.duracao_minutos || 0), 0)
         : parseInt(duracao);
@@ -164,7 +181,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         codigo: codigo || null,
         nome,
         descricao,
-        termos_busca: termosBusca,
+        termos_busca: termosFinais,
         duracao_minutos: duracaoFinal,
         preco: parseFloat(preco),
         ativo,
@@ -207,7 +224,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     } finally {
       setLoading(false);
     }
-  }, [nome, preco, grupoId, codigo, descricao, termosBusca, duracao, ativo, observacoes, servico, temEtapas, duracaoCalculada, etapas, onSuccess, handleClose]);
+  }, [nome, preco, grupoId, codigo, descricao, termosBusca, termoInput, duracao, ativo, observacoes, servico, temEtapas, duracaoCalculada, etapas, onSuccess, handleClose]);
 
   const salvarEtapas = async (servicoId: string) => {
     try {
