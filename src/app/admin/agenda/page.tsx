@@ -267,7 +267,7 @@ export default function AgendaPage() {
       if (agError) throw agError;
 
       // 2. Criar a comanda vinculada
-      const { data: novaComanda, error: cmdError } = await supabase
+      const { data: novaComanda, error: cmdError } = await (supabase as any)
         .from('comandas')
         .insert([{
           numero_comanda: 0,
