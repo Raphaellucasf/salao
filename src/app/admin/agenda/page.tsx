@@ -259,7 +259,7 @@ export default function AgendaPage() {
     setIniciandoAtendimento(apt.id);
     try {
       // 1. Buscar dados do agendamento (cliente_id)
-      const { data: ag, error: agError } = await supabase
+      const { data: ag, error: agError } = await (supabase as any)
         .from('agendamentos')
         .select('id, cliente_id, cliente_nome, profissional_id')
         .eq('id', agendamentoDbId)
