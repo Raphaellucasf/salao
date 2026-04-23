@@ -3,14 +3,15 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withAdminOnly } from '@/components/auth/withAdminOnly';
-import { Settings, CreditCard, Tag, Store, Plus, Pencil, Trash2, Search, DollarSign, Calendar, Users } from 'lucide-react';
+import { Settings, CreditCard, Tag, Store, Plus, Pencil, Trash2, Search, DollarSign, Calendar, Users, Bot } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import FormaPagamentoModal from '@/components/modals/FormaPagamentoModal';
 import PromocaoModal from '@/components/modals/PromocaoModal';
+import FaqModal from '@/components/modals/FaqModal';
 
 function ConfiguracoesPage() {
-  const [activeTab, setActiveTab] = useState<'geral' | 'pagamentos' | 'promocoes'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'pagamentos' | 'promocoes' | 'faq'>('geral');
   const [loading, setLoading] = useState(true);
   
   // Geral
@@ -29,6 +30,14 @@ function ConfiguracoesPage() {
   const [selectedPromocao, setSelectedPromocao] = useState<any>(null);
   const [searchPromocao, setSearchPromocao] = useState('');
   const [filterStatusPromocao, setFilterStatusPromocao] = useState('todos');
+
+  // FAQ
+  const [faqs, setFaqs] = useState<any[]>([]);
+  const [faqModalOpen, setFaqModalOpen] = useState(false);
+  const [selectedFaq, setSelectedFaq] = useState<any>(null);
+  const [searchFaq, setSearchFaq] = useState('');
+  const [filterCategoriaFaq, setFilterCategoriaFaq] = useState('todos');
+  const [filterStatusFaq, setFilterStatusFaq] = useState('todos');
 
   useEffect(() => {
     loadData();
@@ -60,6 +69,14 @@ function ConfiguracoesPage() {
         .order('created_at', { ascending: false });
       
       if (promocoesData) setPromocoes(promocoesData);
+
+      // Carregar FAQs
+      const { data: faqsData } = await supabase
+        .from('faq_estabelecimento')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (faqsData) setFaqs(faqsData);
     } catch (error: any) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -132,6 +149,20 @@ function ConfiguracoesPage() {
     }
   };
 
+  const handleDeleteFaq = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta FAQ?')) return;
+    try {
+      const { error } = await supabase
+        .from('faq_estabelecimento')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      loadData();
+    } catch (error: any) {
+      alert('Erro ao excluir: ' + error.message);
+    }
+  };
+
   // Filtros
   const formasFiltradas = formasPagamento.filter((forma) =>
     forma.nome.toLowerCase().includes(searchForma.toLowerCase())
@@ -154,6 +185,19 @@ function ConfiguracoesPage() {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
+
+  const categoriasUnicas = ['todos', ...Array.from(new Set(faqs.map((f) => f.categoria).filter(Boolean)))];
+
+  const faqsFiltradas = faqs.filter((faq) => {
+    const matchSearch = faq.pergunta_chave?.toLowerCase().includes(searchFaq.toLowerCase()) ||
+      faq.resposta?.toLowerCase().includes(searchFaq.toLowerCase());
+    const matchCategoria = filterCategoriaFaq === 'todos' || faq.categoria === filterCategoriaFaq;
+    const matchStatus =
+      filterStatusFaq === 'todos' ||
+      (filterStatusFaq === 'ativos' && faq.ativo) ||
+      (filterStatusFaq === 'inativos' && !faq.ativo);
+    return matchSearch && matchCategoria && matchStatus;
+  });
 
   const isPromocaoValida = (promo: any) => {
     const hoje = new Date().toISOString().split('T')[0];
@@ -215,6 +259,18 @@ function ConfiguracoesPage() {
             <Tag size={20} />
             <span>Promoções</span>
             <Badge>{promocoes.filter(p => p.ativo).length}</Badge>
+          </button>
+          <button
+            onClick={() => setActiveTab('faq')}
+            className={`flex items-center gap-2 px-6 py-3 border-b-2 transition-colors ${
+              activeTab === 'faq'
+                ? 'border-blue-500 text-blue-600 font-medium'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Bot size={20} />
+            <span>FAQ / Robô</span>
+            <Badge>{faqs.filter(f => f.ativo !== false).length}</Badge>
           </button>
         </div>
       </div>
@@ -617,6 +673,132 @@ function ConfiguracoesPage() {
         </div>
       )}
 
+      {/* Tab: FAQ / Robô */}
+      {activeTab === 'faq' && (
+        <div className="space-y-4">
+          {/* Info banner */}
+          <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <Bot size={20} className="text-blue-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-blue-800">Base de conhecimento do Robô WhatsApp</p>
+              <p className="text-sm text-blue-600">
+                Cadastre perguntas-chave e respostas automáticas. O robô identifica palavras na mensagem do cliente e responde automaticamente.
+              </p>
+            </div>
+          </div>
+
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Buscar pergunta ou resposta..."
+                value={searchFaq}
+                onChange={(e) => setSearchFaq(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
+            <select
+              value={filterCategoriaFaq}
+              onChange={(e) => setFilterCategoriaFaq(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="todos">Todas as categorias</option>
+              {categoriasUnicas.filter(c => c !== 'todos').map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <select
+              value={filterStatusFaq}
+              onChange={(e) => setFilterStatusFaq(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="todos">Todos os status</option>
+              <option value="ativos">Ativos</option>
+              <option value="inativos">Inativos</option>
+            </select>
+            <Button onClick={() => {
+              setSelectedFaq(null);
+              setFaqModalOpen(true);
+            }}>
+              <Plus size={18} className="mr-2" />
+              Nova FAQ
+            </Button>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pergunta Chave</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoria</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Resposta</th>
+                  <th className="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {faqsFiltradas.map((faq) => (
+                  <tr key={faq.id} className="hover:bg-gray-50">
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-gray-900 text-sm">{faq.pergunta_chave}</p>
+                    </td>
+                    <td className="px-5 py-4">
+                      {faq.categoria ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                          <Tag size={11} />
+                          {faq.categoria}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 max-w-xs">
+                      <p className="text-sm text-gray-600 truncate" title={faq.resposta}>
+                        {faq.resposta}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      <Badge variant={faq.ativo !== false ? 'success' : 'default'}>
+                        {faq.ativo !== false ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedFaq(faq);
+                            setFaqModalOpen(true);
+                          }}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFaq(faq.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {faqsFiltradas.length === 0 && (
+              <div className="py-14 text-center">
+                <Bot size={44} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-500 font-medium">Nenhuma FAQ encontrada</p>
+                <p className="text-gray-400 text-sm mt-1">Crie perguntas e respostas para o robô do WhatsApp</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Modals */}
       <FormaPagamentoModal
         isOpen={formaModalOpen}
@@ -636,6 +818,16 @@ function ConfiguracoesPage() {
         }}
         onSuccess={loadData}
         promocao={selectedPromocao}
+      />
+
+      <FaqModal
+        isOpen={faqModalOpen}
+        onClose={() => {
+          setFaqModalOpen(false);
+          setSelectedFaq(null);
+        }}
+        onSuccess={loadData}
+        faq={selectedFaq}
       />
     </div>
   );
