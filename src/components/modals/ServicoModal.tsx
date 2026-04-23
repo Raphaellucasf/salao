@@ -427,7 +427,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
           <textarea
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
-            placeholder="Descrição detalhada do serviço"
+            placeholder="Descrição breve sobre o serviço"
             className="w-full px-3 py-2 border rounded-lg resize-none"
             rows={3}
           />
