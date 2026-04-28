@@ -664,7 +664,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
                       </h3>
                       <div className="space-y-3">
                         {comissoes.map((entry, idx) => (
-                          <div key={entry.profissional_id} className="flex items-center gap-3">
+                          <div key={`${entry.profissional_id}-${idx}`} className="flex items-center gap-3">
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-neutral-900 truncate">{entry.nome}</p>
                               {entry.valor_sugerido > 0 && (

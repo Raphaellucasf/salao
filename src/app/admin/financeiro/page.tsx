@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -174,6 +174,20 @@ function FinanceiroPage() {
 
   useEffect(() => { carregarResumoDia(dataFechamento); }, [dataFechamento, carregarResumoDia]);
 
+  // Realtime: atualiza financeiro quando transações ou fechamentos mudam (inclusive por outro usuário)
+  useEffect(() => {
+    const channel = supabase
+      .channel('financeiro-caixa-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fechamentos_caixa' }, () => {
+        setTimeout(() => {
+          loadTransacoes();
+          carregarResumoDia(dataFechamento);
+        }, 300);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadTransacoes, carregarResumoDia, dataFechamento]);
+
   const handleFecharCaixa = async () => {
     if (!user?.id || !resumoDia) return;
     setProcessandoFechamento(true);
@@ -181,6 +195,9 @@ function FinanceiroPage() {
       await fecharCaixa(dataFechamento, user.id, resumoDia);
       setModalFechamento(null);
       await carregarResumoDia(dataFechamento);
+      // Delay de 200ms para garantir que o DB processou tudo antes de atualizar o financeiro
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await loadTransacoes();
     } catch (e: any) {
       setErroFechamento(e?.message ?? 'Erro ao fechar caixa');
       setModalFechamento(null);
@@ -197,6 +214,9 @@ function FinanceiroPage() {
       await reabrirCaixa(resumoDia.fechamento.id, user.id);
       setModalFechamento(null);
       await carregarResumoDia(dataFechamento);
+      // Delay de 200ms para garantir que o DB processou tudo antes de atualizar o financeiro
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await loadTransacoes();
     } catch (e: any) {
       setErroFechamento(e?.message ?? 'Erro ao reabrir caixa');
       setModalFechamento(null);

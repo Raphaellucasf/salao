@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Plus, Receipt, DollarSign, X, Edit } from 'lucide-react';
 import ComandaModal from '@/components/modals/ComandaModal';
+import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
 import { supabase } from '@/lib/supabase';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
 
@@ -15,6 +16,10 @@ export default function ComandasPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedComanda, setSelectedComanda] = useState<any>(null);
   const [filter, setFilter] = useState<'todas' | 'abertas' | 'fechadas' | 'canceladas'>('abertas');
+
+  // Drawer para visualizar/fechar comanda com fluxo completo (pagamento, transação, comissões)
+  const [viewDrawerOpen, setViewDrawerOpen] = useState(false);
+  const [viewComandaId, setViewComandaId] = useState<number | undefined>(undefined);
 
   // Atalho F8 para abrir nova comanda
   useKeyboardShortcut('F8', () => {
@@ -52,23 +57,10 @@ export default function ComandasPage() {
     }
   };
 
-  const handleFecharComanda = async (comanda: any) => {
-    if (!confirm(`Fechar comanda #${comanda.numero_comanda}?`)) return;
-
-    try {
-      const { error } = await (supabase as any)
-        .from('comandas')
-        .update({
-          status: 'fechada',
-          data_fechamento: new Date().toISOString(),
-        })
-        .eq('id', comanda.id);
-
-      if (error) throw error;
-      loadComandas();
-    } catch (error: any) {
-      alert('Erro ao fechar comanda: ' + error.message);
-    }
+  const handleFecharComanda = (comanda: any) => {
+    // Abre o drawer completo com seleção de pagamento, comissões e registro de transação
+    setViewComandaId(comanda.id);
+    setViewDrawerOpen(true);
   };
 
   const handleCancelarComanda = async (comanda: any) => {
@@ -121,6 +113,21 @@ export default function ComandasPage() {
         }}
         comandaId={selectedComanda?.id}
         onSave={loadComandas}
+      />
+
+      <ComandaViewDrawer
+        isOpen={viewDrawerOpen}
+        onClose={() => {
+          setViewDrawerOpen(false);
+          setViewComandaId(undefined);
+          loadComandas();
+        }}
+        comandaId={viewComandaId}
+        onEdit={() => {
+          setViewDrawerOpen(false);
+          const comanda = comandas.find(c => c.id === viewComandaId);
+          if (comanda) handleEditComanda(comanda);
+        }}
       />
 
       {/* Header */}

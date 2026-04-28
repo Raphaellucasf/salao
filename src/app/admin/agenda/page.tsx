@@ -1,17 +1,15 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle, Trash2, ZoomIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
 
 const START_HOUR = 8;
 const END_HOUR = 21;
-const PIXELS_PER_MINUTE = 2;
-const ROW_HEIGHT = 15 * PIXELS_PER_MINUTE;
-const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MINUTE;
-const GRID_OFFSET = 12; // espaço acima do primeiro slot para o rótulo 08:00 não ficar cortado
+const GRID_OFFSET = 12;
+const SNAP_MINUTES = 15;
 
 interface Appointment {
   id: string;
@@ -37,7 +35,6 @@ interface Appointment {
     auxiliar_nome?: string;
     status_etapa?: string;
   }>;
-  // Metadados para etapas vinculadas
   agendamento_id?: string;
   etapa_index?: number;
   total_etapas?: number;
@@ -54,26 +51,91 @@ interface Professional {
 export default function AgendaPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<{time: string; professionalId: string} | null>(null);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estado para o drawer de visualização da comanda
   const [comandaDrawerOpen, setComandaDrawerOpen] = useState(false);
   const [selectedComandaId, setSelectedComandaId] = useState<number | undefined>(undefined);
   const [iniciandoAtendimento, setIniciandoAtendimento] = useState<string | null>(null);
 
-  // Carregar profissionais
-  useEffect(() => {
-    loadProfessionals();
+  // ── Zoom de densidade ────────────────────────────────────────────────────────
+  const [pixelsPerMinute, setPixelsPerMinute] = useState<number>(() => {
+    if (typeof window === 'undefined') return 2;
+    return Number(localStorage.getItem('agenda-zoom') ?? 2);
+  });
+
+  const handleZoomChange = useCallback((val: number) => {
+    setPixelsPerMinute(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agenda-zoom', String(val));
+    }
   }, []);
 
-  // Carregar agendamentos quando mudar a data
+  const rowHeight = useMemo(() => SNAP_MINUTES * pixelsPerMinute, [pixelsPerMinute]);
+  const totalHeight = useMemo(
+    () => (END_HOUR - START_HOUR) * 60 * pixelsPerMinute,
+    [pixelsPerMinute]
+  );
+
+  // ── Linha "agora" ────────────────────────────────────────────────────────────
+  const [nowMinutes, setNowMinutes] = useState<number>(() => {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes();
+  });
+  const nowLineRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    loadAppointments();
-  }, [selectedDate]);
+    const tick = () => {
+      const n = new Date();
+      setNowMinutes(n.getHours() * 60 + n.getMinutes());
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-scroll para a linha "agora" após carregar
+  useEffect(() => {
+    if (!loading && nowLineRef.current) {
+      nowLineRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [loading]);
+
+  const nowLineTop = useMemo(() => {
+    return (nowMinutes - START_HOUR * 60) * pixelsPerMinute + GRID_OFFSET;
+  }, [nowMinutes, pixelsPerMinute]);
+
+  const isNowVisible = useMemo(
+    () => nowMinutes >= START_HOUR * 60 && nowMinutes <= END_HOUR * 60,
+    [nowMinutes]
+  );
+
+  // ── Helpers de posição ───────────────────────────────────────────────────────
+  const getTopPosition = useCallback(
+    (time: string) => {
+      const [hour, min] = time.split(':').map(Number);
+      return ((hour - START_HOUR) * 60 + min) * pixelsPerMinute + GRID_OFFSET;
+    },
+    [pixelsPerMinute]
+  );
+
+  // Converte offsetY (px desde o topo da coluna) em horário snappado a 15min
+  const yToTime = useCallback(
+    (offsetY: number): string => {
+      const rawMinutes = START_HOUR * 60 + (offsetY - GRID_OFFSET) / pixelsPerMinute;
+      const snapped = Math.round(rawMinutes / SNAP_MINUTES) * SNAP_MINUTES;
+      const clamped = Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - SNAP_MINUTES, snapped));
+      const h = Math.floor(clamped / 60);
+      const m = clamped % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    },
+    [pixelsPerMinute]
+  );
+
+  // ── Dados ────────────────────────────────────────────────────────────────────
+  useEffect(() => { loadProfessionals(); }, []);
+  useEffect(() => { loadAppointments(); }, [selectedDate]);
 
   const loadProfessionals = async () => {
     try {
@@ -81,72 +143,53 @@ export default function AgendaPage() {
         .from('profissionais')
         .select('id, nome, cor_agenda, é_auxiliar')
         .order('nome');
-
       if (error) throw error;
-
       setProfissionais(data || []);
-
-      const profs = (data || []).map((prof: any) => ({
-        id: prof.id,
-        name: prof.nome,
-        color: prof.cor_agenda || '#3B82F6',
-      }));
-
-      setProfessionals(profs);
+      setProfessionals(
+        (data || []).map((prof: any) => ({
+          id: prof.id,
+          name: prof.nome,
+          color: prof.cor_agenda || '#3B82F6',
+        }))
+      );
     } catch (error) {
       console.error('Erro ao carregar profissionais:', error);
     }
   };
 
-  // Carrega appointments do Supabase
   const loadAppointments = async () => {
     try {
       setLoading(true);
-      
       const dataFormatada = selectedDate.toISOString().split('T')[0];
-
       const { data, error } = await supabase
         .from('vw_agendamentos_completos')
         .select('*')
         .eq('data_agendamento', dataFormatada);
-
       if (error) throw error;
 
       const apts: Appointment[] = [];
-
       (data || []).forEach((ag: any) => {
-        // Converter status
         let status: 'confirmed' | 'pending' | 'cancelled' = 'pending';
         if (ag.status === 'concluido' || ag.status === 'confirmado') status = 'confirmed';
         else if (ag.status === 'cancelado') status = 'cancelled';
         else if (ag.status === 'agendado') status = 'pending';
 
-        // Extrair nomes dos serviços do JSON
         let servicosStr = 'Serviço';
         try {
           const servicos = typeof ag.servicos === 'string' ? JSON.parse(ag.servicos) : ag.servicos;
           if (Array.isArray(servicos) && servicos.length > 0) {
             servicosStr = servicos.map((s: any) => s.nome).join(', ');
           }
-        } catch (e) {
-          console.error('Erro ao parsear serviços:', e);
-        }
+        } catch (e) { console.error('Erro ao parsear serviços:', e); }
 
-        // Processar etapas
         let etapas: any[] = [];
         try {
           const etapasData = typeof ag.etapas === 'string' ? JSON.parse(ag.etapas) : ag.etapas;
-          if (Array.isArray(etapasData)) {
-            etapas = etapasData;
-          }
-        } catch (e) {
-          console.error('Erro ao parsear etapas:', e);
-        }
+          if (Array.isArray(etapasData)) etapas = etapasData;
+        } catch (e) { console.error('Erro ao parsear etapas:', e); }
 
-        // Se tem etapas, criar um appointment para cada etapa
         if (ag.tem_etapas && etapas.length > 0) {
           let horaAcumulada = ag.hora_inicio ? ag.hora_inicio.substring(0, 5) : '00:00';
-
           etapas.forEach((etapa, etapaIndex) => {
             const profissionalCor = etapa.profissional_cor || ag.grupo_cor || '#6366F1';
             const horaEtapa = horaAcumulada;
@@ -166,46 +209,20 @@ export default function AgendaPage() {
               total_etapas: etapas.length,
               etapa_id: etapa.id,
             };
-
-            // Bloco do profissional principal
             if (etapa.profissional_id) {
-              apts.push({
-                ...baseApt,
-                id: `${ag.id}-etapa-${etapa.id}-prof`,
-                professionalId: etapa.profissional_id,
-                eh_auxiliar: false,
-              });
+              apts.push({ ...baseApt, id: `${ag.id}-etapa-${etapa.id}-prof`, professionalId: etapa.profissional_id, eh_auxiliar: false });
             }
-
-            // Bloco do auxiliar — aparece na coluna dele também
             if (etapa.auxiliar_id) {
-              apts.push({
-                ...baseApt,
-                id: `${ag.id}-etapa-${etapa.id}-aux`,
-                professionalId: etapa.auxiliar_id,
-                eh_auxiliar: true,
-              });
+              apts.push({ ...baseApt, id: `${ag.id}-etapa-${etapa.id}-aux`, professionalId: etapa.auxiliar_id, eh_auxiliar: true });
             }
-
-            // Fallback: sem profissional nem auxiliar definidos
             if (!etapa.profissional_id && !etapa.auxiliar_id) {
-              apts.push({
-                ...baseApt,
-                id: `${ag.id}-etapa-${etapa.id}`,
-                professionalId: ag.profissional_id,
-                eh_auxiliar: false,
-              });
+              apts.push({ ...baseApt, id: `${ag.id}-etapa-${etapa.id}`, professionalId: ag.profissional_id, eh_auxiliar: false });
             }
-
-            // Calcular próximo horário
             const [hora, minuto] = horaEtapa.split(':').map(Number);
             const totalMinutos = hora * 60 + minuto + etapa.duracao_minutos;
-            const novaHora = Math.floor(totalMinutos / 60);
-            const novoMinuto = totalMinutos % 60;
-            horaAcumulada = `${novaHora.toString().padStart(2, '0')}:${novoMinuto.toString().padStart(2, '0')}`;
+            horaAcumulada = `${String(Math.floor(totalMinutos / 60)).padStart(2, '0')}:${String(totalMinutos % 60).padStart(2, '0')}`;
           });
         } else {
-          // Serviço sem etapas - renderizar normalmente
           apts.push({
             id: ag.id,
             professionalId: ag.profissional_id,
@@ -222,7 +239,6 @@ export default function AgendaPage() {
           });
         }
       });
-
       setAppointments(apts);
     } catch (error) {
       console.error('Erro ao carregar agendamentos:', error);
@@ -232,15 +248,12 @@ export default function AgendaPage() {
     }
   };
 
-  // Exclui agendamento (e comanda em cascata, se existir)
   const excluirAgendamento = useCallback(async (e: React.MouseEvent, apt: Appointment) => {
     e.stopPropagation();
-    const nome = apt.client || 'este atendimento';
-    if (!confirm(`Excluir agendamento de ${nome}?`)) return;
+    if (!confirm(`Excluir agendamento de ${apt.client || 'este atendimento'}?`)) return;
     try {
       const agendamentoId = apt.agendamento_id || apt.id;
       if (apt.comanda_id) {
-        // Deletar comanda — cascade deleta agendamento via FK
         const { error } = await supabase.from('comandas').delete().eq('id', apt.comanda_id);
         if (error) throw error;
       } else {
@@ -253,12 +266,10 @@ export default function AgendaPage() {
     }
   }, [loadAppointments]);
 
-  // Cria uma comanda vinculada ao agendamento e abre o drawer
   const criarComandaFromAgendamento = async (apt: Appointment) => {
     const agendamentoDbId = apt.agendamento_id || apt.id;
     setIniciandoAtendimento(apt.id);
     try {
-      // 1. Buscar dados do agendamento (cliente_id)
       const { data: ag, error: agError } = await (supabase as any)
         .from('agendamentos')
         .select('id, cliente_id, cliente_nome, profissional_id')
@@ -266,7 +277,6 @@ export default function AgendaPage() {
         .single();
       if (agError) throw agError;
 
-      // 2. Criar a comanda vinculada
       const { data: novaComanda, error: cmdError } = await (supabase as any)
         .from('comandas')
         .insert([{
@@ -284,23 +294,18 @@ export default function AgendaPage() {
         .single();
       if (cmdError) throw cmdError;
 
-      // 3. Vincular comanda ao agendamento e mover status para em_andamento
-      const { error: updError } = await supabase
+      const { error: updError } = await (supabase as any)
         .from('agendamentos')
         .update({ comanda_id: novaComanda.id, status: 'em_andamento' })
         .eq('id', agendamentoDbId);
       if (updError) throw updError;
 
-      // 4. Atualizar estado local (todos os blocos do mesmo agendamento)
       setAppointments(prev => prev.map(a => {
         const aId = a.agendamento_id || a.id;
-        if (aId === agendamentoDbId) {
-          return { ...a, comanda_id: novaComanda.id, status: 'confirmed' };
-        }
+        if (aId === agendamentoDbId) return { ...a, comanda_id: novaComanda.id, status: 'confirmed' };
         return a;
       }));
 
-      // 5. Abrir drawer
       setSelectedComandaId(novaComanda.id);
       setComandaDrawerOpen(true);
     } catch (err: any) {
@@ -310,21 +315,15 @@ export default function AgendaPage() {
     }
   };
 
-  // Gerar horários (8:00 às 19:00 a cada 30 min) - memoizado  // Gerar horários (a cada 15 min) - memoizado
   const timeSlots = useMemo(() => {
     const slots = [];
     for (let hour = START_HOUR; hour < END_HOUR; hour++) {
-      slots.push(`${hour.toString().padStart(2, '0')}:00`);
-      slots.push(`${hour.toString().padStart(2, '0')}:15`);
-      slots.push(`${hour.toString().padStart(2, '0')}:30`);
-      slots.push(`${hour.toString().padStart(2, '0')}:45`);
+      slots.push(`${String(hour).padStart(2, '0')}:00`);
+      slots.push(`${String(hour).padStart(2, '0')}:15`);
+      slots.push(`${String(hour).padStart(2, '0')}:30`);
+      slots.push(`${String(hour).padStart(2, '0')}:45`);
     }
     return slots;
-  }, []);
-
-  const getTopPosition = useCallback((time: string) => {
-    const [hour, min] = time.split(':').map(Number);
-    return ((hour - START_HOUR) * 60 + min) * PIXELS_PER_MINUTE + GRID_OFFSET;
   }, []);
 
   const getInitials = useCallback((text: string) => {
@@ -335,163 +334,90 @@ export default function AgendaPage() {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }, []);
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('pt-BR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
   const changeDate = (days: number) => {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() + days);
     setSelectedDate(newDate);
   };
 
-  const getAppointmentStyle = useCallback((startTime: string, duration: number) => {
-    const [hour, minute] = startTime.split(':').map(Number);
-    const startMinutes = hour * 60 + minute;
-    const startIndex = (startMinutes - 8 * 60) / 30;
-    const slots = Math.ceil(duration / 30);
-    
-    return {
-      gridRowStart: startIndex + 1,
-      gridRowEnd: startIndex + slots + 1,
-    };
-  }, []);
-
-  // Drag and Drop handlers (otimizados com useCallback)
+  // ── Drag & Drop ──────────────────────────────────────────────────────────────
   const handleDragStart = useCallback((e: React.DragEvent, appointmentId: string) => {
     setDraggedAppointmentId(appointmentId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', appointmentId);
-    const target = e.target as HTMLElement;
-    target.style.opacity = '0.4';
-    target.style.cursor = 'grabbing';
+    (e.target as HTMLElement).style.opacity = '0.4';
   }, []);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
-    const target = e.target as HTMLElement;
-    target.style.opacity = '1';
-    target.style.cursor = 'grab';
+    (e.target as HTMLElement).style.opacity = '1';
     setDraggedAppointmentId(null);
-    setDropTarget(null);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, time: string, professionalId: string) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const handleDragEnter = useCallback((e: React.DragEvent, time: string, professionalId: string) => {
+  const handleDrop = useCallback(async (e: React.DragEvent, prof: Professional) => {
     e.preventDefault();
     e.stopPropagation();
-    // Usa requestAnimationFrame para suavizar atualização visual
-    requestAnimationFrame(() => {
-      setDropTarget({ time, professionalId });
-    });
-  }, []);
+    if (!draggedAppointmentId) return;
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Só limpa se realmente saiu do elemento (não é um filho)
-    const relatedTarget = e.relatedTarget as HTMLElement;
-    if (!e.currentTarget.contains(relatedTarget)) {
-      requestAnimationFrame(() => {
-        setDropTarget(null);
-      });
+    const draggedAppointment = appointments.find(apt => apt.id === draggedAppointmentId);
+    if (!draggedAppointment) {
+      setDraggedAppointmentId(null);
+      return;
     }
-  }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent, time: string, professionalId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (draggedAppointmentId) {
-      // Busca o appointment atual pelo ID
-      const draggedAppointment = appointments.find(apt => apt.id === draggedAppointmentId);
-        
-      if (draggedAppointment) {
-        // Verifica se houve mudança real
-        const hasChanged = draggedAppointment.startTime !== time || draggedAppointment.professionalId !== professionalId;
-        
-        if (hasChanged) {
-          try {
-            // Se for uma etapa (tem etapa_id), atualizar apenas a etapa
-            if (draggedAppointment.tem_etapas && draggedAppointment.etapa_id) {
-              // Usa o campo correto baseado em qual bloco foi arrastado:
-              // bloco do profissional → atualiza profissional_id
-              // bloco do auxiliar → atualiza auxiliar_id
-              const campoAtualizar = draggedAppointment.eh_auxiliar
-                ? { auxiliar_id: professionalId, hora_inicio: time + ':00' }
-                : { profissional_id: professionalId, hora_inicio: time + ':00' };
+    // ── Calcular horário preciso pelo Y do mouse ────────────────────────────
+    const colEl = e.currentTarget as HTMLElement;
+    const rect = colEl.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const time = yToTime(offsetY);
 
-              const { error } = await (supabase as any)
-                .from('comanda_item_etapas')
-                .update(campoAtualizar as any)
-                .eq('id', draggedAppointment.etapa_id);
+    const hasChanged =
+      draggedAppointment.startTime !== time ||
+      draggedAppointment.professionalId !== prof.id;
 
-              if (error) throw error;
+    if (hasChanged) {
+      try {
+        if (draggedAppointment.tem_etapas && draggedAppointment.etapa_id) {
+          const campoAtualizar = draggedAppointment.eh_auxiliar
+            ? { auxiliar_id: prof.id, hora_inicio: time + ':00' }
+            : { profissional_id: prof.id, hora_inicio: time + ':00' };
 
-              const profissionalDestino = professionals.find(p => p.id === professionalId);
-              console.log(`✓ Etapa ${draggedAppointment.service} movida para ${profissionalDestino?.name} às ${time}`);
-            } else {
-              // Agendamento simples (sem etapas) — atualiza tabela agendamentos
-              // Recalcula hora_fim mantendo a duração original
-              const [th, tm] = time.split(':').map(Number);
-              const endMin = th * 60 + tm + draggedAppointment.duration;
-              const newHoraFim = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}:00`;
+          const { error } = await (supabase as any)
+            .from('comanda_item_etapas')
+            .update(campoAtualizar as any)
+            .eq('id', draggedAppointment.etapa_id);
+          if (error) throw error;
+        } else {
+          const [th, tm] = time.split(':').map(Number);
+          const endMin = th * 60 + tm + draggedAppointment.duration;
+          const newHoraFim = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}:00`;
 
-              const { error } = await supabase
-                .from('agendamentos')
-                .update({
-                  hora_inicio: time + ':00',
-                  hora_fim: newHoraFim,
-                  profissional_id: professionalId,
-                } as any)
-                .eq('id', draggedAppointment.id);
-
-              if (error) throw error;
-
-              const professional = professionals.find(p => p.id === professionalId);
-              const fromProfessional = professionals.find(p => p.id === draggedAppointment.professionalId);
-
-              if (draggedAppointment.professionalId === professionalId) {
-                console.log(`✓ Agendamento de ${draggedAppointment.client} movido de ${draggedAppointment.startTime} para ${time}`);
-              } else {
-                console.log(`✓ Agendamento de ${draggedAppointment.client} transferido de ${fromProfessional?.name} (${draggedAppointment.startTime}) para ${professional?.name} (${time})`);
-              }
-            }
-            
-            // Recarregar agendamentos para refletir mudanças
-            await loadAppointments();
-          } catch (error) {
-            console.error('Erro ao atualizar agendamento:', error);
-            alert('Erro ao mover agendamento. Tente novamente.');
-          }
+          const { error } = await (supabase as any)
+            .from('agendamentos')
+            .update({ hora_inicio: time + ':00', hora_fim: newHoraFim, profissional_id: prof.id })
+            .eq('id', draggedAppointment.id);
+          if (error) throw error;
         }
+        await loadAppointments();
+      } catch (error) {
+        console.error('Erro ao atualizar agendamento:', error);
+        alert('Erro ao mover agendamento. Tente novamente.');
       }
     }
-    
+
     setDraggedAppointmentId(null);
-    setDropTarget(null);
-  }, [draggedAppointmentId, professionals, appointments, profissionais, loadAppointments]);
+  }, [draggedAppointmentId, appointments, yToTime, loadAppointments]);
 
   const getStatusIndicator = useCallback((status: string) => {
-    // Retorna classes para indicador de status (pequeno círculo no topo direito)
     switch (status) {
-      case 'confirmed':
-        return 'bg-green-400';
-      case 'pending':
-        return 'bg-yellow-400';
-      case 'cancelled':
-        return 'bg-red-400';
-      default:
-        return 'bg-neutral-400';
+      case 'confirmed': return 'bg-green-400';
+      case 'pending': return 'bg-yellow-400';
+      case 'cancelled': return 'bg-red-400';
+      default: return 'bg-neutral-400';
     }
   }, []);
 
@@ -499,14 +425,21 @@ export default function AgendaPage() {
     total: appointments.length,
     confirmed: appointments.filter(a => a.status === 'confirmed').length,
     pending: appointments.filter(a => a.status === 'pending').length,
-    cancelled: appointments.filter(a => a.status === 'cancelled').length,
   }), [appointments]);
+
+  // Label do nível de zoom
+  const zoomLabel = useMemo(() => {
+    if (pixelsPerMinute <= 1.5) return 'Compacto';
+    if (pixelsPerMinute <= 2.5) return 'Normal';
+    if (pixelsPerMinute <= 3.5) return 'Espaçoso';
+    return 'Máximo';
+  }, [pixelsPerMinute]);
 
   return (
     <div className="p-6 space-y-6">
       {/* Drag Feedback Banner */}
       {draggedAppointmentId && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center space-x-3">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center space-x-3">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
           </svg>
@@ -517,35 +450,22 @@ export default function AgendaPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
-          <button
-            onClick={() => changeDate(-1)}
-            className="p-2 hover:bg-neutral-200 rounded-lg transition-colors"
-          >
+          <button onClick={() => changeDate(-1)} className="p-2 hover:bg-neutral-200 rounded-lg transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          
           <div className="text-center">
             <h1 className="text-3xl font-bold text-neutral-900 capitalize">
               {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long' })}
             </h1>
             <p className="text-neutral-600">
-              {selectedDate.toLocaleDateString('pt-BR', { 
-                day: 'numeric', 
-                month: 'long', 
-                year: 'numeric' 
-              })}
+              {selectedDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
-
-          <button
-            onClick={() => changeDate(1)}
-            className="p-2 hover:bg-neutral-200 rounded-lg transition-colors"
-          >
+          <button onClick={() => changeDate(1)} className="p-2 hover:bg-neutral-200 rounded-lg transition-colors">
             <ChevronRight className="w-5 h-5" />
           </button>
-
           <button
             onClick={() => setSelectedDate(new Date())}
             className="ml-4 px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors text-sm font-medium"
@@ -554,7 +474,25 @@ export default function AgendaPage() {
           </button>
         </div>
 
-        {/* Stats Resumo */}
+        {/* Slider de Densidade */}
+        <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2 shadow-card">
+          <ZoomIn className="w-4 h-4 text-neutral-500 shrink-0" />
+          <div className="flex flex-col items-center gap-0.5">
+            <input
+              type="range"
+              min={1}
+              max={4}
+              step={0.5}
+              value={pixelsPerMinute}
+              onChange={e => handleZoomChange(Number(e.target.value))}
+              className="w-28 accent-neutral-900 cursor-pointer"
+              title="Densidade da agenda"
+            />
+            <span className="text-[10px] text-neutral-500 font-medium">{zoomLabel}</span>
+          </div>
+        </div>
+
+        {/* Stats */}
         <div className="flex items-center space-x-6 bg-white rounded-xl px-6 py-3 shadow-card">
           <div className="text-center">
             <p className="text-2xl font-bold text-neutral-900">{todayStats.total}</p>
@@ -577,192 +515,194 @@ export default function AgendaPage() {
       {loading ? (
         <Card className="p-12">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4" />
             <p className="text-neutral-600">Carregando agendamentos...</p>
           </div>
         </Card>
       ) : (
         <Card padding="none" className="overflow-hidden">
-        <div className="overflow-x-auto outline-none" style={{ cursor: 'default', userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>
-          <div className="min-w-250">
-            {/* Header com nomes dos profissionais */}
-            <div className="grid bg-neutral-900 text-white sticky top-0 z-10" style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)` }}>
-              <div className="p-4 border-r border-neutral-800 flex items-center justify-center">
-                <CalendarIcon className="w-5 h-5" />
-              </div>
-              {professionals.map((prof) => (
-                <div key={prof.id} className="p-4 border-r border-neutral-800 last:border-r-0">
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: prof.color }} />
-                    <span className="font-semibold">{prof.name}</span>
-                  </div>
+          <div className="overflow-x-auto outline-none" style={{ cursor: 'default', userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>
+            <div className="min-w-250">
+              {/* Header com nomes dos profissionais */}
+              <div
+                className="grid bg-neutral-900 text-white sticky top-0 z-10"
+                style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)` }}
+              >
+                <div className="p-4 border-r border-neutral-800 flex items-center justify-center">
+                  <CalendarIcon className="w-5 h-5" />
                 </div>
-              ))}
-            </div>
-
-            {/* Grid de horários e colunas (Substituído para Posicionamento Absoluto) */}
-            <div className="relative bg-white select-none" style={{ height: `${TOTAL_HEIGHT + GRID_OFFSET + ROW_HEIGHT}px`, caretColor: 'transparent' } as React.CSSProperties}>
-              
-              {/* Linhas de grade de fundo (horizontal) — absolutas para espaçamento coeso */}
-              <div className="absolute inset-0 pointer-events-none z-0">
-                {timeSlots.map((time) => (
-                  <div
-                    key={`bg-line-${time}`}
-                    className={`absolute w-full border-t ${
-                      time.endsWith(':00') ? 'border-neutral-200' : 'border-neutral-100'
-                    }`}
-                    style={{
-                      top: `${getTopPosition(time)}px`,
-                      height: `${ROW_HEIGHT}px`,
-                      ...(time.endsWith(':00') ? { backgroundColor: 'rgba(249,250,251,0.4)' } : {}),
-                    }}
-                  />
+                {professionals.map(prof => (
+                  <div key={prof.id} className="p-4 border-r border-neutral-800 last:border-r-0">
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: prof.color }} />
+                      <span className="font-semibold">{prof.name}</span>
+                    </div>
+                  </div>
                 ))}
               </div>
 
-              <div className="grid absolute inset-0 z-10" style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)` }}>
-                
-                {/* Coluna 1: Rótulos de Tempo */}
-                <div className="relative border-r border-neutral-200 bg-white/60 backdrop-blur-sm pointer-events-none">
-                  {timeSlots.map((time) => {
-                    const isHour = time.endsWith(':00');
+              {/* Grid de horários */}
+              <div
+                className="relative bg-white select-none"
+                style={{ height: `${totalHeight + GRID_OFFSET + rowHeight}px`, caretColor: 'transparent' } as React.CSSProperties}
+              >
+                {/* Linhas de fundo */}
+                <div className="absolute inset-0 pointer-events-none z-0">
+                  {timeSlots.map(time => (
+                    <div
+                      key={`bg-${time}`}
+                      className={`absolute w-full border-t ${time.endsWith(':00') ? 'border-neutral-200' : 'border-neutral-100'}`}
+                      style={{
+                        top: `${getTopPosition(time)}px`,
+                        height: `${rowHeight}px`,
+                        ...(time.endsWith(':00') ? { backgroundColor: 'rgba(249,250,251,0.4)' } : {}),
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Linha "Agora" */}
+                {isNowVisible && (
+                  <div
+                    ref={nowLineRef}
+                    className="absolute left-0 right-0 z-20 pointer-events-none"
+                    style={{ top: `${nowLineTop}px` }}
+                  >
+                    <div className="flex items-center">
+                      <div className="w-20 flex justify-end pr-1.5">
+                        <span className="text-[10px] font-bold text-red-500 bg-white px-1 rounded shadow-sm">
+                          {String(Math.floor(nowMinutes / 60)).padStart(2, '0')}:{String(nowMinutes % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <div className="flex-1 h-px bg-red-400" />
+                      <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 shrink-0" />
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  className="grid absolute inset-0 z-10"
+                  style={{ gridTemplateColumns: `80px repeat(${professionals.length}, 1fr)` }}
+                >
+                  {/* Rótulos de tempo */}
+                  <div className="relative border-r border-neutral-200 bg-white/60 backdrop-blur-sm pointer-events-none">
+                    {timeSlots.map(time => {
+                      const isHour = time.endsWith(':00');
+                      return (
+                        <div
+                          key={`lbl-${time}`}
+                          className="absolute w-full text-right pr-2 select-none"
+                          style={{ top: `${getTopPosition(time)}px`, transform: 'translateY(-50%)' }}
+                        >
+                          {isHour ? (
+                            <span className="text-xs text-neutral-600 font-medium">{time}</span>
+                          ) : (
+                            <span className="text-[9px] text-neutral-400 font-medium">{time.split(':')[1]}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Colunas dos Profissionais */}
+                  {professionals.map(prof => {
+                    const profAppointments = appointments.filter(apt => apt.professionalId === prof.id);
                     return (
-                      <div 
-                        key={`label-${time}`} 
-                        className="absolute w-full text-right pr-2 select-none"
-                        style={{ top: `${getTopPosition(time)}px`, transform: 'translateY(-50%)' }}
+                      <div
+                        key={`col-${prof.id}`}
+                        className="relative border-r border-neutral-200 last:border-r-0 hover:bg-neutral-50/10 transition-colors"
+                        onDragOver={handleDragOver}
+                        onDrop={e => handleDrop(e, prof)}
                       >
-                        {isHour ? (
-                          <span className="text-xs text-neutral-600 font-medium">{time}</span>
-                        ) : (
-                          <span className="text-[9px] text-neutral-400 font-medium">{time.split(':')[1]}</span>
-                        )}
+                        {profAppointments.map(apt => {
+                          const top = getTopPosition(apt.startTime);
+                          const height = Math.max(apt.duration * pixelsPerMinute, 24);
+                          const isUltraCompact = apt.duration < 20;
+                          const serviceInitials = getInitials(apt.service);
+                          const profInitials = getInitials(prof.name);
+                          const shortLabel = isUltraCompact
+                            ? `${apt.tem_etapas && apt.etapa_index !== undefined ? `${apt.etapa_index + 1}. ` : ''}${serviceInitials} (${profInitials})`
+                            : '';
+                          const isDragging = draggedAppointmentId === apt.id;
+
+                          return (
+                            <div
+                              key={apt.id}
+                              draggable
+                              onDragStart={e => { e.stopPropagation(); handleDragStart(e, apt.id); }}
+                              onDragEnd={handleDragEnd}
+                              onClick={e => {
+                                e.stopPropagation();
+                                if (apt.comanda_id) {
+                                  setSelectedComandaId(apt.comanda_id);
+                                  setComandaDrawerOpen(true);
+                                } else if (!apt.eh_auxiliar && !iniciandoAtendimento) {
+                                  criarComandaFromAgendamento(apt);
+                                }
+                              }}
+                              className={`absolute left-1 right-1 rounded shadow-sm border overflow-hidden cursor-pointer hover:shadow-md hover:z-30 transition-all duration-200 group ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}`}
+                              style={{
+                                top: `${top}px`,
+                                height: `${height}px`,
+                                backgroundColor: apt.groupColor ? `${apt.groupColor}15` : '#f3f4f6',
+                                borderColor: apt.groupColor ? `${apt.groupColor}40` : '#e5e7eb',
+                                borderLeftWidth: '3px',
+                                borderLeftColor: apt.groupColor || '#3b82f6',
+                              }}
+                              title={`${apt.client}\n${apt.tem_etapas && apt.etapa_index !== undefined ? `Etapa ${apt.etapa_index + 1}: ` : ''}${apt.service}\n${apt.startTime} (${apt.duration}min)`}
+                            >
+                              <div className="absolute bottom-0 left-0 h-0.5 bg-black/10" style={{ width: '0%' }} />
+                              <div className={`flex flex-col h-full ${isUltraCompact ? 'p-0.5 px-1 justify-center' : 'p-1.5'}`}>
+                                {isUltraCompact ? (
+                                  <div className="flex justify-between items-center h-full">
+                                    <span className="text-[10px] font-bold text-neutral-800 truncate leading-none">{shortLabel}</span>
+                                    {apt.eh_auxiliar && <span className="text-[9px] ml-1">🤝</span>}
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex justify-between items-start">
+                                      <span className="text-xs font-bold text-neutral-800 truncate" title={apt.client}>{apt.client}</span>
+                                      <div className="flex items-center gap-0.5">
+                                        <button
+                                          onClick={e => excluirAgendamento(e, apt)}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-100 rounded"
+                                          title="Excluir agendamento"
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5 text-red-500" />
+                                        </button>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${getStatusIndicator(apt.status)} shrink-0`} />
+                                      </div>
+                                    </div>
+                                    <span className="text-[10px] text-neutral-600 truncate leading-tight mt-0.5">
+                                      {apt.tem_etapas && apt.etapa_index !== undefined ? `${apt.etapa_index + 1}. ` : ''}
+                                      {apt.service}
+                                    </span>
+                                    <div className="flex justify-between items-center mt-auto">
+                                      <span className="text-[9px] text-neutral-500 font-medium tracking-tight">
+                                        {apt.startTime} ({apt.duration}m)
+                                      </span>
+                                      {apt.eh_auxiliar && <span className="text-[10px]">🤝</span>}
+                                      {!apt.eh_auxiliar && !apt.comanda_id && (
+                                        <span title="Iniciar Atendimento"><PlayCircle className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" /></span>
+                                      )}
+                                      {!apt.eh_auxiliar && apt.comanda_id && (
+                                        <span className="text-[8px] text-green-600 opacity-70">✓</span>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
                 </div>
-
-                {/* Colunas dos Profissionais */}
-                {professionals.map((prof) => {
-                  const profAppointments = appointments.filter(apt => apt.professionalId === prof.id);
-
-                  return (
-                    <div 
-                      key={`col-${prof.id}`} 
-                      className="relative border-r border-neutral-200 last:border-r-0 hover:bg-neutral-50/10 transition-colors"
-                      onDragOver={(e) => handleDragOver(e, '00:00', prof.id)} // Simplificado para capturar a coluna
-                      onDrop={(e) => {
-                        // Calcular tempo baseado no drop Y
-                        const defaultTime = dropTarget?.time || '12:00'; 
-                        handleDrop(e, defaultTime, prof.id);
-                      }}
-                    >
-                      {profAppointments.map(apt => {
-                        const top = getTopPosition(apt.startTime);
-                        const rawHeight = apt.duration * PIXELS_PER_MINUTE;
-                        const height = Math.max(rawHeight, 24); // Visual Snap
-                        const isUltraCompact = apt.duration < 20;
-
-                        const serviceInitials = getInitials(apt.service);
-                        const profInitials = getInitials(prof.name);
-                        
-                        let shortLabel = '';
-                        if (isUltraCompact) {
-                          const stepPrefix = apt.tem_etapas && apt.etapa_index !== undefined ? `${apt.etapa_index + 1}. ` : '';
-                          shortLabel = `${stepPrefix}${serviceInitials} (${profInitials})`;
-                        }
-
-                        // Agrupamento de cliente será visualizado com a mesma cor base
-                        const isDragging = draggedAppointmentId === apt.id;
-
-                        return (
-                          <div
-                            key={apt.id}
-                            draggable
-                            onDragStart={(e) => {
-                              e.stopPropagation();
-                              handleDragStart(e, apt.id);
-                            }}
-                            onDragEnd={handleDragEnd}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (apt.comanda_id) {
-                                setSelectedComandaId(apt.comanda_id);
-                                setComandaDrawerOpen(true);
-                              } else if (!apt.eh_auxiliar && !iniciandoAtendimento) {
-                                criarComandaFromAgendamento(apt);
-                              }
-                            }}
-                            className={`absolute left-1 right-1 rounded shadow-sm border overflow-hidden cursor-pointer hover:shadow-md hover:z-30 transition-all duration-200 group ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}`}
-                            style={{
-                              top: `${top}px`,
-                              height: `${height}px`,
-                              backgroundColor: apt.groupColor ? `${apt.groupColor}15` : '#f3f4f6', 
-                              borderColor: apt.groupColor ? `${apt.groupColor}40` : '#e5e7eb',
-                              borderLeftWidth: '3px',
-                              borderLeftColor: apt.groupColor || '#3b82f6',
-                            }}
-                            title={`${apt.client}\n${apt.tem_etapas && apt.etapa_index !== undefined ? `Etapa ${apt.etapa_index + 1}: ` : ''}${apt.service}\n${apt.startTime} (${apt.duration}min)`}
-                          >
-                                        {/* Linha de progresso fake */}
-                            <div 
-                              className="absolute bottom-0 left-0 h-0.5 bg-black/10"
-                              style={{ width: '0%' }}
-                            />
-
-                            <div className={`flex flex-col h-full ${isUltraCompact ? 'p-0.5 px-1 justify-center' : 'p-1.5'}`}>
-                              {isUltraCompact ? (
-                                <div className="flex justify-between items-center h-full">
-                                  <span className="text-[10px] font-bold text-neutral-800 truncate leading-none">
-                                    {shortLabel}
-                                  </span>
-                                  {apt.eh_auxiliar && <span className="text-[9px] ml-1">🤝</span>}
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="flex justify-between items-start">
-                                    <span className="text-xs font-bold text-neutral-800 truncate" title={apt.client}>{apt.client}</span>
-                                    <div className="flex items-center gap-0.5">
-                                      <button
-                                        onClick={(e) => excluirAgendamento(e, apt)}
-                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-100 rounded"
-                                        title="Excluir agendamento"
-                                      >
-                                        <Trash2 className="w-2.5 h-2.5 text-red-500" />
-                                      </button>
-                                      <div className={`w-1.5 h-1.5 rounded-full ${getStatusIndicator(apt.status)} shrink-0`} />
-                                    </div>
-                                  </div>
-                                  <span className="text-[10px] text-neutral-600 truncate leading-tight mt-0.5">
-                                    {apt.tem_etapas && apt.etapa_index !== undefined ? `${apt.etapa_index + 1}. ` : ''}
-                                    {apt.service}
-                                  </span>
-                                  <div className="flex justify-between items-center mt-auto">
-                                    <span className="text-[9px] text-neutral-500 font-medium tracking-tight">
-                                      {apt.startTime} ({apt.duration}m)
-                                    </span>
-                                    {apt.eh_auxiliar && <span className="text-[10px]">🤝</span>}
-                                    {!apt.eh_auxiliar && !apt.comanda_id && (
-                                      <PlayCircle className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Iniciar Atendimento" />
-                                    )}
-                                    {!apt.eh_auxiliar && apt.comanda_id && (
-                                      <span className="text-[8px] text-green-600 opacity-70" title="Comanda aberta">✓</span>
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
               </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
       )}
 
       {/* Legenda */}
@@ -779,9 +719,14 @@ export default function AgendaPage() {
           <div className="w-4 h-4 bg-red-500 border-2 border-red-600 rounded" />
           <span className="text-neutral-700">Cancelado</span>
         </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-px bg-red-400" />
+          <div className="w-2 h-2 rounded-full bg-red-500" />
+          <span className="text-neutral-700">Agora</span>
+        </div>
       </div>
 
-      {/* Drawer de visualização da comanda */}
+      {/* Drawer */}
       <ComandaViewDrawer
         isOpen={comandaDrawerOpen}
         onClose={() => {
