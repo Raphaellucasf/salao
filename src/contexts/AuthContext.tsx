@@ -80,21 +80,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) { setLoading(false); return; }
+        // getUser() validates the token with the Supabase Auth server (secure).
+        // getSession() reads storage blindly and must NOT be used for auth checks.
+        const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+        if (userError) { setLoading(false); return; }
 
-        if (session?.user) {
-          const metaRole = (session.user.user_metadata?.role as UserRole) ?? 'client';
+        if (authUser) {
+          const metaRole = (authUser.user_metadata?.role as UserRole) ?? 'client';
           setUser({
-            id:        session.user.id,
-            email:     session.user.email,
+            id:        authUser.id,
+            email:     authUser.email,
             role:      metaRole,
-            full_name: session.user.user_metadata?.full_name ?? session.user.email,
+            full_name: authUser.user_metadata?.full_name ?? authUser.email,
           });
           setRole(metaRole);
           setLoading(false);
 
-          fetchUserRole(session.user.id, session.user.user_metadata, session.user.email)
+          fetchUserRole(authUser.id, authUser.user_metadata, authUser.email)
             .then(({ role: dbRole, full_name }) => {
               if (dbRole !== metaRole) {
                 setRole(dbRole);
@@ -103,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
         }
       } catch (err) {
-        console.error('Erro ao carregar sessão:', err);
+        console.error('Erro ao carregar usuário:', err);
       } finally {
         setLoading(false);
       }

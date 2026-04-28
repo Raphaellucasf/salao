@@ -14,7 +14,7 @@ export default function ComandasPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedComanda, setSelectedComanda] = useState<any>(null);
-  const [filter, setFilter] = useState<'todas' | 'abertas' | 'fechadas'>('abertas');
+  const [filter, setFilter] = useState<'todas' | 'abertas' | 'fechadas' | 'canceladas'>('abertas');
 
   // Atalho F8 para abrir nova comanda
   useKeyboardShortcut('F8', () => {
@@ -38,6 +38,8 @@ export default function ComandasPage() {
         query = query.eq('status', 'aberta');
       } else if (filter === 'fechadas') {
         query = query.eq('status', 'fechada');
+      } else if (filter === 'canceladas') {
+        query = query.eq('status', 'cancelada');
       }
 
       const { data, error } = await query;
@@ -54,7 +56,7 @@ export default function ComandasPage() {
     if (!confirm(`Fechar comanda #${comanda.numero_comanda}?`)) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('comandas')
         .update({
           status: 'fechada',
@@ -70,14 +72,17 @@ export default function ComandasPage() {
   };
 
   const handleCancelarComanda = async (comanda: any) => {
-    if (!confirm(`Excluir comanda #${comanda.numero_comanda}? Esta ação não pode ser desfeita.`)) return;
+    if (!confirm(`Cancelar comanda #${comanda.numero_comanda}? Ela ficará no histórico como cancelada.`)) return;
 
     try {
-      const { error } = await supabase.rpc('excluir_comanda', { p_comanda_id: comanda.id });
+      const { error } = await (supabase as any)
+        .from('comandas')
+        .update({ status: 'cancelada' })
+        .eq('id', comanda.id);
       if (error) throw error;
       loadComandas();
     } catch (error: any) {
-      alert('Erro ao excluir comanda: ' + error.message);
+      alert('Erro ao cancelar comanda: ' + error.message);
     }
   };
 
@@ -187,6 +192,12 @@ export default function ComandasPage() {
             onClick={() => setFilter('fechadas')}
           >
             Fechadas
+          </Button>
+          <Button
+            variant={filter === 'canceladas' ? 'primary' : 'secondary'}
+            onClick={() => setFilter('canceladas')}
+          >
+            Canceladas
           </Button>
         </div>
       </Card>

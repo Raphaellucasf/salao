@@ -51,7 +51,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       console.log('🔍 Carregando comanda ID:', comandaId, 'Tipo:', typeof comandaId);
       
       // Primeiro, carregar a comanda básica
-      const { data: comandaData, error: comandaError } = await supabase
+      const { data: comandaData, error: comandaError } = await (supabase as any)
         .from('comandas')
         .select('*')
         .eq('id', comandaId)
@@ -76,7 +76,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       console.log('✅ Comanda básica carregada:', comandaData);
       
       // Carregar itens da comanda
-      const { data: itens, error: itensError } = await supabase
+      const { data: itens, error: itensError } = await (supabase as any)
         .from('comanda_itens')
         .select('*')
         .eq('comanda_id', comandaId);
@@ -250,7 +250,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       }
 
       console.log('[fecharComanda] Chamando supabase.update …');
-      const { error: cmdError } = await supabase
+      const { error: cmdError } = await (supabase as any)
         .from('comandas')
         .update(updatePayload)
         .eq('id', comanda.id);
@@ -320,7 +320,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
             .eq('id', item.item_id)
             .single();
           if (prod !== null) {
-            await supabase.from('estoque_movimentacoes').insert([{
+            await (supabase as any).from('estoque_movimentacoes').insert([{
               produto_id: item.item_id,
               tipo: 'venda',
               quantidade: Math.round(item.quantidade || 1),
@@ -379,13 +379,16 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
   };
 
   const cancelarComanda = async () => {
-    if (!comanda || !confirm(`Excluir comanda #${comanda.numero_comanda}? Esta ação não pode ser desfeita.`)) return;
+    if (!comanda || !confirm(`Cancelar comanda #${comanda.numero_comanda}? Ela ficará no histórico como cancelada.`)) return;
     try {
-      const { error } = await supabase.rpc('excluir_comanda', { p_comanda_id: comanda.id });
+      const { error } = await (supabase as any)
+        .from('comandas')
+        .update({ status: 'cancelada' })
+        .eq('id', comanda.id);
       if (error) throw error;
       onClose();
     } catch (err: any) {
-      alert(`Erro ao excluir: ${err.message}`);
+      alert(`Erro ao cancelar: ${err.message}`);
     }
   };
 

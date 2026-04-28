@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 
-// GET /api/admin/transacoes?dataInicio=2026-04-01
+// GET /api/admin/transacoes?dataInicio=2026-04-01&dataFim=2026-04-30
 export async function GET(req: NextRequest) {
   const dataInicio = req.nextUrl.searchParams.get('dataInicio');
+  const dataFim    = req.nextUrl.searchParams.get('dataFim');
   if (!dataInicio) {
     return NextResponse.json({ error: 'dataInicio obrigatório' }, { status: 400 });
   }
 
   const supabase = createServerSupabase();
-  const { data, error } = await (supabase as any)
+  let query = (supabase as any)
     .from('transacoes')
     .select('*')
-    .gte('data', dataInicio)
-    .order('data', { ascending: false });
+    .gte('data', dataInicio);
+
+  if (dataFim) query = query.lte('data', dataFim);
+
+  const { data, error } = await query.order('data', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
