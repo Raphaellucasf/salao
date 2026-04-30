@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
+import { DEFAULT_UNIT_ID } from '@/services/caixa';
 import { Box, DollarSign, Clock, Scissors, Plus, X } from 'lucide-react';
 
 interface PacoteServicoModalProps {
@@ -170,7 +171,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
         throw new Error('Preço total deve ser maior que zero');
       }
 
-      let pacoteId = pacote?.id;
+      const pacoteId = pacote?.id;
 
       // Calcular inline para evitar closure stale
       const duracaoCalc = servicosSelecionados.reduce(
@@ -184,49 +185,34 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
 
       const pacotePayload = {
         ...formData,
+        ...(pacoteId ? { id: pacoteId } : {}),
         duracao_total_minutos: duracaoCalc > 0 ? duracaoCalc : 1,
         preco_original: precoCalc,
       };
 
-      if (pacoteId) {
-        // Update pacote
-        const { error: updateError } = await supabase
-          .from('pacotes_servicos')
-          .update(pacotePayload as any)
-          .eq('id', pacoteId);
-
-        if (updateError) throw updateError;
-
-        // Delete old itens
-        await supabase
-          .from('pacotes_servicos_itens')
-          .delete()
-          .eq('pacote_id', pacoteId);
-      } else {
-        // Insert pacote
-        const { data, error: insertError } = await supabase
-          .from('pacotes_servicos')
-          .insert([pacotePayload as any])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-        pacoteId = data.id;
-      }
-
-      // Insert itens
-      const itens = servicosSelecionados.map((item, index) => ({
-        pacote_id: pacoteId,
+      const itensPayload = servicosSelecionados.map((item, index) => ({
         servico_id: item.servico_id,
         quantidade: item.quantidade,
         ordem: index + 1,
       }));
 
-      const { error: itensError } = await supabase
-        .from('pacotes_servicos_itens')
-        .insert(itens);
+      const res = await fetch('/api/admin/pacotes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: pacoteId ? 'UPDATE' : 'CREATE',
+          pacote: pacotePayload,
+          itens: itensPayload,
+        }),
+      });
 
-      if (itensError) throw itensError;
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Erro ao salvar pacote');
+      }
 
       onSave();
       onClose();

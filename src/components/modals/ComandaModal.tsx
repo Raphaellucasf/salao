@@ -66,10 +66,11 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
   useEffect(() => {
     async function checarPacotes() {
       if (!formData.cliente_id) { setPacotesAtivos([]); return; }
-      const cliente = clientes.find((c) => c.id === formData.cliente_id);
-      if (!cliente?.cpf) { setPacotesAtivos([]); return; }
+      // Usa == para comparar mesmo que um seja string e o outro number
+      const cliente = clientes.find((c) => String(c.id) === String(formData.cliente_id));
+      if (!cliente) { setPacotesAtivos([]); return; }
       try {
-        const ativos = await verificarPacoteAtivo(cliente.cpf);
+        const ativos = await verificarPacoteAtivo(Number(cliente.id));
         setPacotesAtivos(ativos);
         setPacotesDismissed(new Set()); // reset ao trocar de cliente
       } catch {
@@ -93,26 +94,29 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
   const loadData = async () => {
     try {
-      const [clientesData, produtosData, servicosData, pacotesData, profissionaisData] = await Promise.all([
+      const [clientesData, produtosData, servicosData, profissionaisData, pacotesFetchResult] = await Promise.all([
         supabase.from('clientes').select('*').order('nome'),
         supabase.from('produtos').select('*').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('servicos').select('*').order('nome'),
-        supabase.from('pacotes_servicos').select('*').eq('ativo', true).order('nome'),
         supabase.from('profissionais').select('id, nome, é_auxiliar').eq('ativo', true).order('nome'),
+        fetch('/api/admin/pacotes').then(r => r.json())
       ]);
 
       if (clientesData.data) setClientes(clientesData.data);
       if (produtosData.data) setProdutos(produtosData.data);
       if (servicosData.data) setServicos(servicosData.data);
-      if (pacotesData.data) setPacotes(pacotesData.data);
+      
+      const pacotesFiltrados = pacotesFetchResult.error ? [] : pacotesFetchResult.filter((p: any) => p.ativo);
+      setPacotes(pacotesFiltrados);
+      
       if (profissionaisData.data) {
         // Todos os profissionais (incluindo os que não são auxiliares)
         setProfissionais(profissionaisData.data);
         // Apenas profissionais que também são auxiliares
-        setAuxiliares(profissionaisData.data.filter(p => p.é_auxiliar));
+        setAuxiliares(profissionaisData.data.filter((p: any) => p.é_auxiliar));
       }
-    } catch (err) {
-      console.error('Erro ao carregar dados:', err);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
     }
   };
 
@@ -247,15 +251,29 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           etapas = data || [];
         }
 
+        const pacoteDisponivel = pacotesAtivos.find(p => p.servico_id === item.id);
+        const precoNormal = item.preco || 0;
+        
+        let valorUn = precoNormal;
+        let isPacote = false;
+        let desc = item.nome;
+
+        if (pacoteDisponivel) {
+           valorUn = 0;
+           isPacote = true;
+           desc = item.nome + ' (Sessão de Pacote)';
+        }
+
         setNovoItem({
           ...novoItem,
           item_id: item.id,
-          descricao: item.nome,
-          valor_unitario: item.preco || 0,
-          valor_total: (item.preco || 0) * novoItem.quantidade,
+          descricao: desc,
+          valor_unitario: valorUn,
+          valor_total: valorUn * novoItem.quantidade,
           tem_etapas: item.tem_etapas || false,
           etapas: etapas,
           atribuicoes_etapas: [],
+          pacote_cliente_id: isPacote ? pacoteDisponivel.id : undefined,
         });
       }
     } else if (tipo === 'pacote') {
@@ -285,7 +303,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
   };
 
   const adicionarItem = () => {
-    if (!novoItem.descricao || novoItem.valor_unitario <= 0) {
+    if (!novoItem.descricao || (novoItem.valor_unitario <= 0 && !novoItem.pacote_cliente_id)) {
       setError('Selecione um item válido');
       return;
     }
@@ -313,6 +331,48 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       atribuicoes_etapas: [],
     });
     setError('');
+  };
+
+  const adicionarPacoteDireto = async (pacote: PacoteAtivo) => {
+    const srv = servicos.find(s => s.id === pacote.servico_id);
+    let etapas: any[] = [];
+    let atribuicoes: any[] = [];
+    
+    if (srv?.tem_etapas) {
+      const { data } = await supabase
+        .from('servico_etapas')
+        .select('*')
+        .eq('servico_id', pacote.servico_id)
+        .eq('ativo', true)
+        .order('ordem');
+      etapas = data || [];
+      
+      // Auto-atribuir ao profissional responsável principal se existir
+      if (formData.profissional_id) {
+        atribuicoes = etapas.map(e => ({
+          etapa_id: e.id,
+          profissional_id: formData.profissional_id,
+          exige_profissional: true, // Assuming default true for now to avoid validation errors
+          percentual: 100
+        }));
+      }
+    }
+
+    const itemPacote: ComandaItem = {
+      id: crypto.randomUUID(),
+      tipo: 'servico',
+      item_id: pacote.servico_id,
+      descricao: `${pacote.servico_nome} (Sessão de Pacote)`,
+      quantidade: 1,
+      valor_unitario: 0,
+      valor_total: 0,
+      tem_etapas: srv?.tem_etapas || false,
+      etapas: etapas,
+      atribuicoes_etapas: atribuicoes,
+      pacote_cliente_id: pacote.id,
+    };
+
+    setItens(prev => [...prev, itemPacote]);
   };
 
   const removerItem = (index: number) => {
@@ -462,7 +522,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         const { data: itensInseridos, error: itensError } = await supabase
           .from('comanda_itens')
           .insert(itens.map(item => {
-            const { id, tem_etapas, etapas, atribuicoes_etapas, ...itemData } = item;
+            const { id, tem_etapas, etapas, atribuicoes_etapas, pacote_cliente_id, ...itemData } = item;
             return {
               comanda_id: comandaId,
               ...itemData,
@@ -540,7 +600,10 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             .gt('hora_fim', horaInicioConflito);
           if (overlap && overlap.length > 0) {
             const h0 = (overlap[0] as any).hora_inicio?.substring(0, 5) || '';
-            throw new Error(`Conflito de horário: profissional já possui atendimento às ${h0}`);
+            const confirmMsg = `Conflito de horário: o profissional já possui atendimento às ${h0}.\nDeseja agendar neste horário mesmo assim?`;
+            if (!confirm(confirmMsg)) {
+              return; // Cancela a operação se o usuário não confirmar
+            }
           }
         }
 
@@ -569,7 +632,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         const { data: itensInseridos, error: itensError } = await supabase
           .from('comanda_itens')
           .insert(itens.map(item => {
-            const { id, tem_etapas, etapas, atribuicoes_etapas, ...itemData } = item;
+            const { id, tem_etapas, etapas, atribuicoes_etapas, pacote_cliente_id, ...itemData } = item;
             return {
               comanda_id: novaComanda.id,
               ...itemData,
@@ -680,35 +743,6 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             ))}
           </select>
         </div>
-
-        {/* T-08: Alertas de pacote ativo */}
-        {pacotesAtivos
-          .filter((p) => !pacotesDismissed.has(p.id))
-          .map((pacote) => (
-            <div
-              key={pacote.id}
-              className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3"
-            >
-              <Gift className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-amber-900">
-                  Pacote disponível: {pacote.servico_nome}
-                </p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  {pacote.sessoes_restantes} sessão{pacote.sessoes_restantes !== 1 ? 'ões' : ''} disponível{pacote.sessoes_restantes !== 1 ? 'is' : ''} de {pacote.sessoes_total}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPacotesDismissed((prev) => new Set([...prev, pacote.id]))}
-                className="text-amber-500 hover:text-amber-700 text-xs font-medium shrink-0"
-                title="Dispensar alerta"
-              >
-                Fechar
-              </button>
-            </div>
-          ))
-        }
 
         {/* Profissional e Auxiliar */}
         <div className="grid grid-cols-2 gap-4">
@@ -852,6 +886,39 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
                   setNovoItem({ ...novoItem, atribuicoes_etapas: atribuicoes });
                 }}
               />
+            </div>
+          )}
+
+          {/* Pacotes do Cliente */}
+          {pacotesAtivos.length > 0 && (
+            <div className="mt-6 border border-primary-200 rounded-lg overflow-hidden">
+              <div className="bg-primary-50 px-4 py-2 border-b border-primary-200 flex items-center gap-2">
+                <Gift className="w-4 h-4 text-primary-600" />
+                <h4 className="font-semibold text-primary-900 text-sm">Pacotes Disponíveis do Cliente</h4>
+              </div>
+              <div className="divide-y divide-primary-100 bg-white">
+                {pacotesAtivos.map((pacote) => (
+                  <div key={pacote.id} className="flex items-center justify-between p-3 hover:bg-neutral-50 transition-colors">
+                    <div className="flex-1">
+                      <p className="font-medium text-neutral-900 text-sm">
+                        {pacote.servico_nome}
+                      </p>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        <span className="font-semibold text-primary-600">{pacote.sessoes_restantes} sessão{pacote.sessoes_restantes !== 1 ? 'ões' : ''}</span> de {pacote.sessoes_total} disponível{pacote.sessoes_restantes !== 1 ? 'is' : ''}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => adicionarPacoteDireto(pacote)}
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Usar Sessão
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

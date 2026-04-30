@@ -380,6 +380,26 @@ export default function AgendaPage() {
       draggedAppointment.professionalId !== prof.id;
 
     if (hasChanged) {
+      // OVERLAP CHECK
+      const [th, tm] = time.split(':').map(Number);
+      const endMin = th * 60 + tm + draggedAppointment.duration;
+      const startMins = th * 60 + tm;
+      
+      const isOverlapping = appointments.some(a => {
+        if (a.id === draggedAppointment.id || a.professionalId !== prof.id || a.status === 'cancelled') return false;
+        const [ah, am] = a.startTime.split(':').map(Number);
+        const aStartMins = ah * 60 + am;
+        const aEndMins = aStartMins + a.duration;
+        return startMins < aEndMins && endMin > aStartMins;
+      });
+
+      if (isOverlapping) {
+        if (!confirm(`Conflito de horário: o profissional já possui outro atendimento neste horário.\nDeseja mover o agendamento mesmo assim?`)) {
+          setDraggedAppointmentId(null);
+          return;
+        }
+      }
+
       try {
         if (draggedAppointment.tem_etapas && draggedAppointment.etapa_id) {
           const campoAtualizar = draggedAppointment.eh_auxiliar

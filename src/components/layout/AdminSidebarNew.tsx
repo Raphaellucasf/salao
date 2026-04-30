@@ -64,8 +64,8 @@ export default function AdminSidebarNew() {
       {/* Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-neutral-200">
         {!isCollapsed && (
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-linear-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-linear-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>

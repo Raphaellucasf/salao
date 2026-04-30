@@ -341,31 +341,49 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
         const itensPacote = (comanda.comanda_itens || []).filter(
           (item: any) => item.tipo === 'pacote' && item.item_id,
         );
-        if (itensPacote.length > 0 && comanda.cliente?.cpf) {
-          for (const item of itensPacote) {
-            const [{ data: pacoteServicos }, { data: pacoteData }] = await Promise.all([
-              supabase.from('pacotes_servicos_itens' as any).select('servico_id, quantidade').eq('pacote_id', item.item_id),
-              supabase.from('pacotes_servicos' as any).select('validade_dias').eq('id', item.item_id).single(),
-            ]);
-            if (!pacoteServicos || (pacoteServicos as any[]).length === 0) continue;
-            const validadeDias: number | null = (pacoteData as any)?.validade_dias ?? null;
-            const dataValidade = validadeDias
-              ? new Date(Date.now() + validadeDias * 86_400_000).toISOString().split('T')[0]
-              : null;
-            const pkRows = (pacoteServicos as any[]).map((ps: any) => ({
-              unit_id: DEFAULT_UNIT_ID,
-              cliente_cpf: comanda.cliente.cpf,
-              servico_id: ps.servico_id,
-              sessoes_total: (ps.quantidade || 1) * (item.quantidade || 1),
-              sessoes_consumidas: 0,
-              comanda_origem_id: comanda.id,
-              data_validade: dataValidade,
-            }));
-            await (supabase as any).from('pacotes_cliente').insert(pkRows);
+        if (itensPacote.length > 0 && comanda.cliente_id) {
+          try {
+            await fetch('/api/admin/pacotes/cliente', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                comandaId: comanda.id,
+                clienteId: comanda.cliente_id,
+                clienteCpf: comanda.cliente?.cpf,
+                itensPacote
+              })
+            });
+          } catch (err) {
+            console.error('Erro ao vincular pacote:', err);
           }
         }
-      } catch {
-        // Pacotes não bloqueiam o fechamento
+
+        // T-08: Dar baixa nas sessões de pacote via API (bypass RLS)
+        const servicosPacote = (comanda.comanda_itens || []).filter(
+          (item: any) => item.tipo === 'servico' &&
+            item.descricao?.includes('(Sess\u00e3o de Pacote)') &&
+            item.valor_unitario === 0 &&
+            item.item_id
+        );
+
+        for (const item of servicosPacote) {
+          try {
+            await fetch('/api/admin/pacotes/cliente', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                clienteId: comanda.cliente_id,
+                servicoId: item.item_id,
+                quantidade: item.quantidade || 1,
+              }),
+            });
+          } catch (err) {
+            console.error('Erro ao debitar sess\u00e3o do pacote:', err);
+          }
+        }
+
+      } catch (err) {
+        console.error('Erro ao processar pacotes:', err);
       }
 
       toast.success(`Comanda #${comanda.numero_comanda} fechada com sucesso!`);

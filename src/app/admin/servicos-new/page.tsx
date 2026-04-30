@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { 
@@ -50,7 +50,7 @@ function ServicosNewPage() {
         { data: gruposData },
       ] = await Promise.all([
         supabase.from('servicos').select('*, grupos_servicos(nome, cor, icone)').order('nome'),
-        supabase.from('pacotes_servicos').select('*').order('nome'),
+        fetch('/api/admin/pacotes').then(r => r.json()).then(data => ({ data: data.error ? null : data })),
         supabase.from('grupos_servicos').select('*').order('nome'),
       ]);
 

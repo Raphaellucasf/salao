@@ -7,6 +7,7 @@ import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
 import { useFormCache } from '@/hooks/useFormCache';
+import { verificarPacoteAtivo, type PacoteAtivo } from '@/services/pacotes';
 
 interface Cliente {
   id?: number;
@@ -38,6 +39,17 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave, titulo 
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pacotesAtivos, setPacotesAtivos] = useState<PacoteAtivo[]>([]);
+
+  useEffect(() => {
+    if (cliente?.id) {
+      verificarPacoteAtivo(cliente.id)
+        .then(setPacotesAtivos)
+        .catch(() => setPacotesAtivos([]));
+    } else {
+      setPacotesAtivos([]);
+    }
+  }, [cliente]);
 
   useEffect(() => {
     if (cliente) {
@@ -164,6 +176,38 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave, titulo 
             <option value="inativo">Inativo</option>
           </select>
         </div>
+
+        {/* Pacotes Ativos */}
+        {cliente && pacotesAtivos.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-neutral-200">
+            <h3 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center gap-2">
+              <span className="text-xl">🎁</span> Pacotes Ativos
+            </h3>
+            <div className="space-y-2">
+              {pacotesAtivos.map((pacote) => {
+                const disponivel = pacote.sessoes_total - pacote.sessoes_consumidas;
+                const perc = Math.round((pacote.sessoes_consumidas / pacote.sessoes_total) * 100);
+                return (
+                  <div key={pacote.id} className="bg-neutral-50 p-3 rounded-lg border border-neutral-200">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium text-neutral-800 text-sm">{pacote.servico?.nome || 'Serviço'}</span>
+                      <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                        {disponivel} sessões restando
+                      </span>
+                    </div>
+                    <div className="w-full bg-neutral-200 rounded-full h-1.5 mt-2">
+                      <div className="bg-primary-500 h-1.5 rounded-full transition-all" style={{ width: `${perc}%` }}></div>
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[10px] text-neutral-500">Usadas: {pacote.sessoes_consumidas}</span>
+                      <span className="text-[10px] text-neutral-500">Total: {pacote.sessoes_total}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-4">
           <Button type="button" variant="secondary" onClick={onClose} className="flex-1">

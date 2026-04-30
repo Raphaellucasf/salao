@@ -114,46 +114,14 @@ function RelatoriosPage() {
     setOrigemDadosCache({});
   }, [dataInicio, dataFim]);
 
-  // Dados de exemplo para cada relatório (fallback se não houver dados reais)
+  // Dados de exemplo para cada relatório (zerados para entrega ao cliente)
   const dadosExemplo: Record<string, any[]> = {
-    'Relatório de Faturamento': [
-      { Data: '01/02/2026', Serviço: 'Corte Feminino', Cliente: 'Ana Silva', Valor: 80, Pagamento: 'Cartão', Profissional: 'Julya' },
-      { Data: '02/02/2026', Serviço: 'Coloração + Corte', Cliente: 'Maria Santos', Valor: 250, Pagamento: 'PIX', Profissional: 'Dimas' },
-      { Data: '03/02/2026', Serviço: 'MegaHair', Cliente: 'Paula Costa', Valor: 800, Pagamento: 'Cartão', Profissional: 'Julya' },
-      { Data: '05/02/2026', Serviço: 'Progressiva', Cliente: 'Carla Souza', Valor: 350, Pagamento: 'Dinheiro', Profissional: 'Hendril' },
-      { Data: '07/02/2026', Serviço: 'Barba + Corte', Cliente: 'João Pedro', Valor: 60, Pagamento: 'PIX', Profissional: 'Dimas' },
-    ],
-    'Relatório de Clientes': [
-      { Nome: 'Ana Silva', Telefone: '(18) 99999-0001', Email: 'ana@email.com', 'Última Visita': '01/02/2026', 'Total Gasto': 'R$ 450,00', Visitas: 8 },
-      { Nome: 'Maria Santos', Telefone: '(18) 99999-0002', Email: 'maria@email.com', 'Última Visita': '02/02/2026', 'Total Gasto': 'R$ 1.200,00', Visitas: 15 },
-      { Nome: 'Paula Costa', Telefone: '(18) 99999-0003', Email: 'paula@email.com', 'Última Visita': '03/02/2026', 'Total Gasto': 'R$ 2.500,00', Visitas: 12 },
-      { Nome: 'Carla Souza', Telefone: '(18) 99999-0004', Email: 'carla@email.com', 'Última Visita': '05/02/2026', 'Total Gasto': 'R$ 890,00', Visitas: 6 },
-    ],
-    'Relatório de Serviços': [
-      { Serviço: 'Corte Feminino', 'Qtd Realizada': 45, 'Duração Média': '60 min', 'Valor Médio': 'R$ 80,00', 'Profissional Mais Solicitado': 'Julya' },
-      { Serviço: 'Coloração', 'Qtd Realizada': 28, 'Duração Média': '120 min', 'Valor Médio': 'R$ 200,00', 'Profissional Mais Solicitado': 'Hendril' },
-      { Serviço: 'MegaHair', 'Qtd Realizada': 12, 'Duração Média': '240 min', 'Valor Médio': 'R$ 800,00', 'Profissional Mais Solicitado': 'Julya' },
-      { Serviço: 'Progressiva', 'Qtd Realizada': 22, 'Duração Média': '180 min', 'Valor Médio': 'R$ 350,00', 'Profissional Mais Solicitado': 'Hendril' },
-      { Serviço: 'Corte Masculino', 'Qtd Realizada': 38, 'Duração Média': '30 min', 'Valor Médio': 'R$ 40,00', 'Profissional Mais Solicitado': 'Dimas' },
-    ],
-    'Relatório de Produtos': [
-      { Produto: 'Shampoo Profissional', Categoria: 'Cabelo', 'Qtd Vendida': 45, 'Estoque Atual': 120, 'Preço': 'R$ 35,00', 'Faturamento': 'R$ 1.575,00' },
-      { Produto: 'Condicionador Premium', Categoria: 'Cabelo', 'Qtd Vendida': 38, 'Estoque Atual': 95, 'Preço': 'R$ 42,00', 'Faturamento': 'R$ 1.596,00' },
-      { Produto: 'Máscara Hidratante', Categoria: 'Tratamento', 'Qtd Vendida': 28, 'Estoque Atual': 65, 'Preço': 'R$ 68,00', 'Faturamento': 'R$ 1.904,00' },
-      { Produto: 'Ampola de Tratamento', Categoria: 'Tratamento', 'Qtd Vendida': 52, 'Estoque Atual': 200, 'Preço': 'R$ 15,00', 'Faturamento': 'R$ 780,00' },
-    ],
-    'Relatório de Profissionais': [
-      { Profissional: 'Dimas', 'Atendimentos': 78, 'Faturamento': 'R$ 8.540,00', 'Comissão (60%)': 'R$ 5.124,00', 'Avaliação': '4.9/5.0', Especialidade: 'Masculino/Química' },
-      { Profissional: 'Julya', 'Atendimentos': 65, 'Faturamento': 'R$ 12.450,00', 'Comissão (50%)': 'R$ 6.225,00', 'Avaliação': '5.0/5.0', Especialidade: 'Feminino/MegaHair' },
-      { Profissional: 'Hendril', 'Atendimentos': 52, 'Faturamento': 'R$ 9.280,00', 'Comissão (50%)': 'R$ 4.640,00', 'Avaliação': '4.8/5.0', Especialidade: 'Química/Tratamentos' },
-      { Profissional: 'Amélia', 'Atendimentos': 48, 'Faturamento': 'R$ 6.850,00', 'Comissão (50%)': 'R$ 3.425,00', 'Avaliação': '4.9/5.0', Especialidade: 'Estética Facial' },
-    ],
-    'Relatório de Agenda': [
-      { Data: '01/02/2026', 'Agendamentos': 12, 'Realizados': 10, 'Cancelados': 1, 'No-Show': 1, 'Taxa Ocupação': '83%' },
-      { Data: '02/02/2026', 'Agendamentos': 15, 'Realizados': 14, 'Cancelados': 0, 'No-Show': 1, 'Taxa Ocupação': '93%' },
-      { Data: '03/02/2026', 'Agendamentos': 11, 'Realizados': 11, 'Cancelados': 0, 'No-Show': 0, 'Taxa Ocupação': '100%' },
-      { Data: '05/02/2026', 'Agendamentos': 14, 'Realizados': 12, 'Cancelados': 2, 'No-Show': 0, 'Taxa Ocupação': '86%' },
-    ],
+    'Relatório de Faturamento': [],
+    'Relatório de Clientes': [],
+    'Relatório de Serviços': [],
+    'Relatório de Produtos': [],
+    'Relatório de Profissionais': [],
+    'Relatório de Agenda': [],
   };
 
   const handleVisualizar = async (titulo: TipoRelatorio) => {

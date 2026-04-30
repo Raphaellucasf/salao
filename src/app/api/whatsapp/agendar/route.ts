@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // TODO: Replace 'any' with a proper type for body validation
   let body: any = {};
 
   try {

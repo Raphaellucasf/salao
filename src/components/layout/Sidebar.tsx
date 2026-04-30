@@ -113,7 +113,7 @@ export default function Sidebar({ userRole = 'admin' }: SidebarProps) {
         {/* Footer */}
         <div className={`p-4 border-t border-neutral-200 ${isCollapsed ? 'px-2' : ''}`}>
           <div
-            className={`flex items-center gap-3 p-3 rounded-lg bg-neutral-50 ${
+            className={`flex items-center gap-2 p-3 rounded-lg bg-neutral-50 ${
               isCollapsed ? 'justify-center' : ''
             }`}
           >

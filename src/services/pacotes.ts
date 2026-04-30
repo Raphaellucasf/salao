@@ -15,47 +15,26 @@ export interface PacoteAtivo {
  * Se servico_id for omitido, retorna todos os pacotes ativos do cliente.
  */
 export async function verificarPacoteAtivo(
-  cpf: string,
+  cliente_id: number,
   servico_id?: string,
 ): Promise<PacoteAtivo[]> {
-  if (!cpf) return [];
+  if (!cliente_id) return [];
 
-  const cpfLimpo = cpf.replace(/\D/g, '');
-  if (!cpfLimpo) return [];
+  try {
+    let url = `/api/admin/pacotes/cliente?clienteId=${cliente_id}`;
+    if (servico_id) {
+      url += `&servicoId=${servico_id}`;
+    }
 
-  let query = (supabase as any)
-    .from('pacotes_cliente')
-    .select('id, servico_id, sessoes_total, sessoes_consumidas, data_validade')
-    .eq('unit_id', DEFAULT_UNIT_ID)
-    .filter('cliente_cpf', 'in', `("${cpf}","${cpfLimpo}")`)
-    .lt('sessoes_consumidas', 'sessoes_total')
-    .or(`data_validade.is.null,data_validade.gte.${new Date().toISOString().split('T')[0]}`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Erro ao buscar pacotes');
 
-  if (servico_id) {
-    query = query.eq('servico_id', servico_id);
+    const pacotes = await res.json();
+    return Array.isArray(pacotes) ? pacotes : [];
+  } catch (error) {
+    console.error('Erro em verificarPacoteAtivo:', error);
+    return [];
   }
-
-  const { data: pacotes } = await query;
-  if (!pacotes || pacotes.length === 0) return [];
-
-  // Buscar nomes dos serviços
-  const servicoIds = [...new Set((pacotes as any[]).map((p: any) => p.servico_id))];
-  const { data: servicos } = await supabase
-    .from('servicos')
-    .select('id, nome')
-    .in('id', servicoIds);
-
-  const nomeMap: Record<string, string> = {};
-  (servicos ?? []).forEach((s: any) => { nomeMap[s.id] = s.nome; });
-
-  return (pacotes as any[]).map((p: any) => ({
-    id: p.id,
-    servico_id: p.servico_id,
-    servico_nome: nomeMap[p.servico_id] ?? 'Serviço',
-    sessoes_restantes: p.sessoes_total - p.sessoes_consumidas,
-    sessoes_total: p.sessoes_total,
-    data_validade: p.data_validade ?? null,
-  }));
 }
 
 /**

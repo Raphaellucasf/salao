@@ -38,7 +38,7 @@ export default function ClientesPage() {
     loadClientes();
   }, []);
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
 
     try {
@@ -49,9 +49,14 @@ export default function ClientesPage() {
 
       if (error) throw error;
       loadClientes();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao excluir cliente:', error);
-      alert('Erro ao excluir cliente');
+      const msg = error?.message || error?.details || 'Erro desconhecido';
+      if (msg.includes('foreign key') || msg.includes('violates') || msg.includes('referenced')) {
+        alert('Não é possível excluir este cliente pois ele possui agendamentos ou comandas vinculados. Considere inativá-lo.');
+      } else {
+        alert(`Erro ao excluir cliente: ${msg}`);
+      }
     }
   };
 
@@ -70,11 +75,17 @@ export default function ClientesPage() {
     setSelectedCliente(null);
   };
 
+  // Calcular stats dinâmicos
+  const clientesAtivos = clientes.filter(c => c.status === 'ativo').length;
+  const now = new Date();
+  const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
+  const novosMes = clientes.filter(c => new Date(c.created_at) >= inicioMes).length;
+
   const stats = [
-    { label: 'Total de Clientes', value: clientes.length.toString(), change: '+12', icon: User, color: 'bg-primary-500' },
-    { label: 'Clientes Ativos', value: clientes.filter(c => c.status === 'ativo').length.toString(), change: '+8', icon: TrendingUp, color: 'bg-green-500' },
-    { label: 'Ticket Médio', value: 'R$ 385', change: '+15%', icon: DollarSign, color: 'bg-accent-500' },
-    { label: 'Novos este Mês', value: '23', change: '+5', icon: Calendar, color: 'bg-blue-500' },
+    { label: 'Total de Clientes', value: clientes.length.toString(), change: '', icon: User, color: 'bg-primary-500' },
+    { label: 'Clientes Ativos', value: clientesAtivos.toString(), change: '', icon: TrendingUp, color: 'bg-green-500' },
+    { label: 'Ticket Médio', value: '-', change: '', icon: DollarSign, color: 'bg-accent-500' },
+    { label: 'Novos este Mês', value: novosMes.toString(), change: '', icon: Calendar, color: 'bg-blue-500' },
   ];
 
   const filteredClientes = clientes.filter(cliente => {
