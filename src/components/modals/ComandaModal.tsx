@@ -5,7 +5,7 @@ import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Plus, Trash2, ShoppingBag, Scissors, Package as PackageIcon, Gift } from 'lucide-react';
+import { Plus, Trash2, ShoppingBag, Scissors, Package as PackageIcon, Gift, ClipboardList } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AtribuirEtapasServico from './AtribuirEtapasServico';
 import { verificarPacoteAtivo, type PacoteAtivo } from '@/services/pacotes';
@@ -745,17 +745,17 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         </div>
 
         {/* Profissional e Auxiliar */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Profissional Responsável
+              Profissional responsável
             </label>
             <select
               value={formData.profissional_id}
               onChange={(e) => setFormData({ ...formData, profissional_id: e.target.value })}
               className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
-              <option value="">Selecione o profissional</option>
+              <option value="">Selecionar profissional...</option>
               {profissionais.map(prof => (
                 <option key={prof.id} value={prof.id}>
                   {prof.nome}
@@ -773,7 +773,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               onChange={(e) => setFormData({ ...formData, auxiliar_id: e.target.value })}
               className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
-              <option value="">Selecione o auxiliar</option>
+              <option value="">Selecionar auxiliar...</option>
               {auxiliares.map(aux => (
                 <option key={aux.id} value={aux.id}>
                   {aux.nome}
@@ -784,10 +784,10 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         </div>
 
         {/* Data e Hora do Agendamento */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Data do Agendamento
+              Data do agendamento
             </label>
             <input
               type="date"
@@ -799,7 +799,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Hora de Início
+              Hora de início
             </label>
             <input
               type="time"
@@ -812,10 +812,10 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
         {/* Adicionar Item */}
         <div className="border-t pt-4">
-          <h3 className="font-semibold text-neutral-900 mb-4">Adicionar Item</h3>
+          <h3 className="font-semibold text-neutral-900 mb-4">Adicionar item</h3>
           
-          <div className="grid grid-cols-12 gap-3">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="col-span-1 md:col-span-2">
               <label className="block text-sm font-medium text-neutral-700 mb-2">Tipo</label>
               <select
                 value={novoItem.tipo}
@@ -828,13 +828,13 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               </select>
             </div>
 
-            <div className="col-span-5">
+            <div className="col-span-1 md:col-span-5">
               <label className="block text-sm font-medium text-neutral-700 mb-2">Item</label>
               <select
                 onChange={handleItemSelect}
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
               >
-                <option value="">Selecione...</option>
+                <option value="">Selecionar item...</option>
                 {novoItem.tipo === 'produto' && produtos.map(p => (
                   <option key={p.id} value={p.id}>{p.nome} - R$ {p.preco?.toFixed(2) || '0.00'}</option>
                 ))}
@@ -847,7 +847,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               </select>
             </div>
 
-            <div className="col-span-2">
+            <div className="col-span-1 md:col-span-2">
               <label className="block text-sm font-medium text-neutral-700 mb-2">Qtd</label>
               <Input
                 type="number"
@@ -858,7 +858,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               />
             </div>
 
-            <div className="col-span-2">
+            <div className="col-span-1 md:col-span-2">
               <label className="block text-sm font-medium text-neutral-700 mb-2">Total</label>
               <Input
                 type="text"
@@ -867,7 +867,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
               />
             </div>
 
-            <div className="col-span-1 flex items-end">
+            <div className="col-span-1 md:col-span-1 flex items-end">
               <Button type="button" onClick={adicionarItem} variant="primary" size="sm" className="w-full">
                 <Plus className="w-4 h-4" />
               </Button>
@@ -924,9 +924,15 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         </div>
 
         {/* Lista de Itens */}
-        {itens.length > 0 && (
-          <div className="border-t pt-4">
-            <h3 className="font-semibold text-neutral-900 mb-3">Itens da Comanda</h3>
+        <div className="border-t pt-4">
+          <h3 className="font-semibold text-neutral-900 mb-3">Itens da comanda</h3>
+          {itens.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-neutral-400 bg-neutral-50 rounded-lg border border-dashed border-neutral-300">
+              <ClipboardList className="w-8 h-8 mb-2 opacity-40" />
+              <p className="text-sm font-medium">Nenhum item adicionado à comanda</p>
+              <p className="text-xs mt-1">Selecione um serviço ou produto acima</p>
+            </div>
+          ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {itens.map((item, index) => (
                 <div key={index} className="bg-neutral-50 rounded-lg">
@@ -998,8 +1004,8 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Total */}
         {itens.length > 0 && (
@@ -1015,15 +1021,12 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
         {/* Observações */}
         <div>
-          <label className="block text-sm font-medium text-neutral-700 mb-2">
-            Observações
-          </label>
+          <label className="block text-sm font-medium text-neutral-700 mb-2">Observações adicionais</label>
           <textarea
             value={formData.observacoes}
             onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-            rows={2}
-            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            placeholder="Observações adicionais..."
+            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[100px]"
+            placeholder="Digite alguma observação se necessário..."
           />
         </div>
 
@@ -1043,8 +1046,9 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
             variant="primary"
             className="flex-1"
             disabled={loading || itens.length === 0}
+            isLoading={loading}
           >
-            {loading ? 'Salvando...' : comandaId ? 'Atualizar' : 'Abrir Comanda'}
+            {comandaId ? 'Atualizar comanda' : 'Abrir comanda'}
           </Button>
         </div>
       </form>

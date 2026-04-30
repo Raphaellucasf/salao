@@ -56,6 +56,7 @@ export default function AdminSidebarNew() {
   return (
     <aside 
       className={`
+        hidden lg:flex flex-col
         fixed left-0 top-0 h-screen bg-white border-r border-neutral-200
         transition-all duration-300 ease-in-out z-40 shadow-sm
         ${isCollapsed ? 'w-20' : 'w-64'}
@@ -98,7 +99,7 @@ export default function AdminSidebarNew() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate text-neutral-900">
-                {user?.full_name || 'Admin Lucas'}
+                {user?.full_name || 'Usuário'}
               </p>
               <p className="text-xs text-neutral-500 truncate">
                 {isAdmin ? 'Administrador' : 'Usuário'}

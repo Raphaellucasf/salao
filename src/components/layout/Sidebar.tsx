@@ -122,7 +122,7 @@ export default function Sidebar({ userRole = 'admin' }: SidebarProps) {
             </div>
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-neutral-900 truncate">Dimas</p>
+                <p className="text-sm font-medium text-neutral-900 truncate">Usuário</p>
                 <p className="text-xs text-neutral-500 truncate">
                   {userRole === 'admin' ? 'Administrador' : 'Profissional'}
                 </p>

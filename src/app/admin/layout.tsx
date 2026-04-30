@@ -1,9 +1,10 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import AdminSidebarNew from '@/components/layout/AdminSidebarNew';
+import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import QuickActions from '@/components/layout/QuickActions';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import dynamic from 'next/dynamic';
@@ -72,12 +73,15 @@ export default function AdminLayout({
 
   return (
     <>
-      <div className="min-h-screen bg-neutral-50">
-        {/* Sidebar */}
+      <div className="min-h-screen bg-neutral-50 pb-16 lg:pb-0">
+        {/* Sidebar Desktop */}
         <AdminSidebarNew />
 
+        {/* Sidebar Mobile (Bottom Nav) */}
+        <MobileBottomNav />
+
         {/* Main Content */}
-        <main className="ml-64 transition-all duration-300">
+        <main className="ml-0 lg:ml-64 transition-all duration-300">
           <div className="min-h-screen">
             {children}
           </div>
