@@ -92,12 +92,14 @@ export default function UsuarioModal({ isOpen, onClose, onSuccess, usuario }: Us
   }, [isOpen, usuario]);
 
   const loadRoles = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('roles')
       .select('*')
       .eq('ativo', true)
       .order('nivel', { ascending: false });
     
+    if (error) console.error('[UsuarioModal] erro ao carregar roles:', error);
+    console.log('[UsuarioModal] roles carregadas:', data);
     if (data) setRoles(data);
   };
 
