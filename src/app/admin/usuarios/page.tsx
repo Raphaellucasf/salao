@@ -55,8 +55,9 @@ function UsuariosPage() {
       // Busca via API route (service_role) — bypassa RLS
       const res = await fetch('/api/admin/get-users');
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao carregar usuários');
+        let msg = `Erro ao carregar usuários (HTTP ${res.status})`;
+        try { const err = await res.json(); msg = err.error || msg; } catch {}
+        throw new Error(msg);
       }
       const { usuarios: usuariosData } = await res.json();
 

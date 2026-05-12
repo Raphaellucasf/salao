@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function requireAdmin(
   req: NextRequest
 ): Promise<{ id: string; email?: string; role: string } | NextResponse> {
+  try {
   // O middleware já deve ter validado, mas verificamos novamente para defesa em profundidade.
   // Usa o header Authorization (Bearer token) se presente, caso contrário lê cookies.
   const authHeader = req.headers.get('authorization');
@@ -108,4 +109,11 @@ export async function requireAdmin(
   }
 
   return { id: user.id, email: user.email, role };
+  } catch (err: any) {
+    console.error('[requireAdmin] erro inesperado:', err);
+    return NextResponse.json(
+      { error: 'Erro interno de autenticação' },
+      { status: 500 }
+    );
+  }
 }
