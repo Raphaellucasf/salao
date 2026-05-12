@@ -423,13 +423,19 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         {renderEtapasSection()}
 
         <div>
-          <label className="block text-sm font-medium mb-1">Descrição</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium">Descrição</label>
+            <span className={`text-xs font-medium ${descricao.length > 130 ? descricao.length >= 150 ? 'text-red-500' : 'text-yellow-500' : 'text-neutral-400'}`}>
+              {descricao.length}/150
+            </span>
+          </div>
           <textarea
             value={descricao}
-            onChange={(e) => setDescricao(e.target.value)}
+            onChange={(e) => { if (e.target.value.length <= 150) setDescricao(e.target.value); }}
             placeholder="Descrição breve sobre o serviço"
-            className="w-full px-3 py-2 border rounded-lg resize-none"
+            className={`w-full px-3 py-2 border rounded-lg resize-none transition-colors ${descricao.length >= 150 ? 'border-red-400 focus:ring-red-400' : 'focus:ring-blue-500'}`}
             rows={3}
+            maxLength={150}
           />
         </div>
 

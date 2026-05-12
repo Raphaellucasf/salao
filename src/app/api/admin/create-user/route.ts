@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
       user_metadata: {
         full_name: nome,
         role: authRole,
+        must_change_password: senha_temporaria,
       },
     });
 

@@ -140,40 +140,35 @@ export default function UsuarioModal({ isOpen, onClose, onSuccess, usuario }: Us
       const roleName = selectedRole?.nome ?? '';
 
       if (usuario) {
-        // EDITAR usuário existente
-        const usuarioData = {
-          nome,
-          email,
-          telefone,
-          cpf,
-          data_nascimento: dataNascimento || null,
-          role_id: roleId,
-          permissoes_customizadas: permissoesCustomizadas,
-          ativo,
-          tema,
-          notificacoes_email: notificacoesEmail,
-          notificacoes_push: notificacoesPush,
-          notificacoes_sistema: notificacoesSistema,
-          senha_temporaria: senhaTemporaria,
-          observacoes,
-          ...(senha && { senha_hash: `$2a$10$${senha}` }),
-        };
+        // EDITAR usuário existente via API (bypassa RLS)
+        const res = await fetch('/api/admin/update-user', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: usuario.id,
+            auth_id: usuario.auth_id || null,
+            nome,
+            email,
+            telefone,
+            cpf,
+            data_nascimento: dataNascimento || null,
+            role_id: roleId,
+            roleName,
+            roleNivel,
+            ativo,
+            observacoes,
+            senha_temporaria: senhaTemporaria,
+            permissoes_customizadas: permissoesCustomizadas,
+            tema,
+            notificacoes_email: notificacoesEmail,
+            notificacoes_push: notificacoesPush,
+            notificacoes_sistema: notificacoesSistema,
+            nova_senha: senha || undefined,
+          }),
+        });
 
-        const { error } = await supabase
-          .from('usuarios')
-          .update(usuarioData)
-          .eq('id', usuario.id);
-
-        if (error) throw error;
-
-        // Se tem auth_id e role mudou, sincroniza perm no Supabase Auth
-        if (usuario.auth_id && roleId !== usuario.role_id) {
-          await fetch('/api/admin/update-user-role', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ authId: usuario.auth_id, roleName, roleNivel }),
-          });
-        }
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Erro ao editar usuário');
       } else {
         // CRIAR novo usuário via API route (cria auth + users + usuarios)
         const res = await fetch('/api/admin/create-user', {

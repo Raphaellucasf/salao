@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { Card } from '@/components/ui';
 import { 
   Calendar, 
@@ -49,6 +50,9 @@ interface ComissaoProfissional {
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { podeAcessar } = usePermissoes();
+  const verFinanceiro = podeAcessar('financeiro');
+  const verRelatorios = podeAcessar('relatorios');
 
   const [loading, setLoading] = useState(true);
   const [agendamentosHoje, setAgendamentosHoje] = useState(0);
@@ -171,8 +175,10 @@ export default function AdminDashboard() {
           .order('created_at', { ascending: false })
           .limit(3),
 
-        // Faturamento hoje e do mês — via API route (service_role bypassa RLS)
-        fetch(`/api/admin/financeiro-stats?hoje=${hoje}&inicioMes=${inicioMes}`),
+        // Faturamento hoje e do mês — apenas se tiver permissão
+        verFinanceiro
+          ? fetch(`/api/admin/financeiro-stats?hoje=${hoje}&inicioMes=${inicioMes}`)
+          : Promise.resolve({ ok: false, json: async () => ({}) }),
 
         // Comissões do mês — tabela comissoes (populada ao fechar comanda)
         (supabase as any)
@@ -193,9 +199,11 @@ export default function AdminDashboard() {
       setUpcomingAppointments(proximosData || []);
 
       // Faturamento hoje e do mês — via API route (service_role)
-      const fatStats = fatStatsResp.ok ? await fatStatsResp.json() : { faturamentoHoje: 0, faturamentoMes: 0 };
-      setFaturamentoHoje(fatStats.faturamentoHoje ?? 0);
-      setFaturamentoMes(fatStats.faturamentoMes ?? 0);
+      if (verFinanceiro) {
+        const fatStats = fatStatsResp.ok ? await fatStatsResp.json() : { faturamentoHoje: 0, faturamentoMes: 0 };
+        setFaturamentoHoje(fatStats.faturamentoHoje ?? 0);
+        setFaturamentoMes(fatStats.faturamentoMes ?? 0);
+      }
 
       // Montar atividades reais
       const activities: Activity[] = [];
@@ -390,19 +398,21 @@ export default function AdminDashboard() {
           </Card>
         </Link>
 
-        <Link href="/admin/financeiro">
-          <Card padding="lg" hover className="cursor-pointer">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-600" />
+        {verFinanceiro && (
+          <Link href="/admin/financeiro">
+            <Card padding="lg" hover className="cursor-pointer">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-neutral-900">Financeiro</h3>
+                  <p className="text-sm text-neutral-600">Relatórios e caixa</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-neutral-900">Financeiro</h3>
-                <p className="text-sm text-neutral-600">Relatórios e caixa</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
+            </Card>
+          </Link>
+        )}
       </div>
 
       {/* T-09: Cadastros Pendentes Hoje */}
@@ -539,20 +549,22 @@ export default function AdminDashboard() {
           </div>
         </Card>
 
-        <Card padding="lg" hover>
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm text-neutral-600">Faturamento Hoje</p>
-              <p className="text-2xl font-bold text-neutral-900 mt-1">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(faturamentoHoje)}
-              </p>
-              <p className="text-xs text-neutral-500 mt-1">Serviços concluídos</p>
+        {verFinanceiro && (
+          <Card padding="lg" hover>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-sm text-neutral-600">Faturamento Hoje</p>
+                <p className="text-2xl font-bold text-neutral-900 mt-1">
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(faturamentoHoje)}
+                </p>
+                <p className="text-xs text-neutral-500 mt-1">Serviços concluídos</p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-green-500 to-green-600 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-green-500 to-green-600 flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-white" />
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         <Card padding="lg" hover>
           <div className="flex items-center justify-between">
@@ -568,23 +580,25 @@ export default function AdminDashboard() {
           </div>
         </Card>
 
-        <Card padding="lg" hover>
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm text-neutral-600">Faturamento do Mês</p>
-              <p className="text-2xl font-bold text-neutral-900 mt-1">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(faturamentoMes)}
-              </p>
+        {verFinanceiro && (
+          <Card padding="lg" hover>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-sm text-neutral-600">Faturamento do Mês</p>
+                <p className="text-2xl font-bold text-neutral-900 mt-1">
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(faturamentoMes)}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-accent-500 to-accent-600 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-accent-500 to-accent-600 flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-white" />
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
 
-      {/* Comissões por Profissional */}
-      {comissoesMes.length > 0 && (
+      {/* Comissões por Profissional — apenas para quem tem acesso financeiro */}
+      {verFinanceiro && comissoesMes.length > 0 && (
         <Card padding="lg">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-neutral-900">Comissões do Mês</h2>

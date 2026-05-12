@@ -5,6 +5,7 @@ import { Card } from '@/components/ui';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle, Trash2, ZoomIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
+import NovoAgendamentoModal from '@/components/modals/NovoAgendamentoModal';
 
 const START_HOUR = 8;
 const END_HOUR = 21;
@@ -55,9 +56,14 @@ export default function AgendaPage() {
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profError, setProfError] = useState<string | null>(null);
   const [comandaDrawerOpen, setComandaDrawerOpen] = useState(false);
   const [selectedComandaId, setSelectedComandaId] = useState<number | undefined>(undefined);
   const [iniciandoAtendimento, setIniciandoAtendimento] = useState<string | null>(null);
+
+  // Novo agendamento via clique no horário
+  const [novoAgOpen, setNovoAgOpen] = useState(false);
+  const [novoAgData, setNovoAgData] = useState({ professionalId: '', professionalColor: '', time: '' });
 
   // ── Zoom de densidade ────────────────────────────────────────────────────────
   const [pixelsPerMinute, setPixelsPerMinute] = useState<number>(() => {
@@ -139,11 +145,20 @@ export default function AgendaPage() {
 
   const loadProfessionals = async () => {
     try {
+      setProfError(null);
+      console.log('[Agenda] Iniciando carga de profissionais...');
       const { data, error } = await supabase
         .from('profissionais')
-        .select('id, nome, cor_agenda, é_auxiliar')
+        .select('id, nome, cor_agenda')
         .order('nome');
-      if (error) throw error;
+      console.log('[Agenda] Resposta profissionais:', { data, error });
+      if (error) {
+        setProfError(`Erro Supabase: ${error.message} (code: ${error.code})`);
+        throw error;
+      }
+      if (!data || data.length === 0) {
+        setProfError('Nenhum profissional encontrado no banco de dados.');
+      }
       setProfissionais(data || []);
       setProfessionals(
         (data || []).map((prof: any) => ({
@@ -152,8 +167,9 @@ export default function AgendaPage() {
           color: prof.cor_agenda || '#3B82F6',
         }))
       );
-    } catch (error) {
-      console.error('Erro ao carregar profissionais:', error);
+    } catch (error: any) {
+      console.error('[Agenda] Erro ao carregar profissionais:', error);
+      setProfError(error?.message || 'Erro desconhecido ao carregar profissionais.');
     }
   };
 
@@ -432,6 +448,17 @@ export default function AgendaPage() {
     setDraggedAppointmentId(null);
   }, [draggedAppointmentId, appointments, yToTime, loadAppointments]);
 
+  // ── Clique em horário vazio → novo agendamento ────────────────────────────
+  const handleColumnClick = useCallback((e: React.MouseEvent, prof: Professional) => {
+    if (draggedAppointmentId) return; // ignorar cliques durante drag
+    const colEl = e.currentTarget as HTMLElement;
+    const rect = colEl.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const time = yToTime(offsetY);
+    setNovoAgData({ professionalId: prof.id, professionalColor: prof.color, time });
+    setNovoAgOpen(true);
+  }, [draggedAppointmentId, yToTime]);
+
   const getStatusIndicator = useCallback((status: string) => {
     switch (status) {
       case 'confirmed': return 'bg-green-400';
@@ -530,6 +557,23 @@ export default function AgendaPage() {
           </div>
         </div>
       </div>
+
+      {/* Erro ao carregar profissionais */}
+      {profError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <span className="text-red-500 text-xl">⚠️</span>
+          <div>
+            <p className="font-semibold text-red-700">Erro ao carregar profissionais</p>
+            <p className="text-sm text-red-600 mt-1">{profError}</p>
+            <button
+              onClick={loadProfessionals}
+              className="mt-2 text-sm text-red-700 underline hover:text-red-900"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Agenda Timeline */}
       {loading ? (
@@ -630,9 +674,10 @@ export default function AgendaPage() {
                     return (
                       <div
                         key={`col-${prof.id}`}
-                        className="relative border-r border-neutral-200 last:border-r-0 hover:bg-neutral-50/10 transition-colors"
+                        className="relative border-r border-neutral-200 last:border-r-0 hover:bg-blue-50/20 transition-colors cursor-cell"
                         onDragOver={handleDragOver}
                         onDrop={e => handleDrop(e, prof)}
+                        onClick={e => handleColumnClick(e, prof)}
                       >
                         {profAppointments.map(apt => {
                           const top = getTopPosition(apt.startTime);
@@ -755,6 +800,18 @@ export default function AgendaPage() {
           loadAppointments();
         }}
         comandaId={selectedComandaId}
+      />
+
+      {/* Modal Novo Agendamento (clique no horário) */}
+      <NovoAgendamentoModal
+        isOpen={novoAgOpen}
+        onClose={() => setNovoAgOpen(false)}
+        onSuccess={loadAppointments}
+        professionalId={novoAgData.professionalId}
+        professionalColor={novoAgData.professionalColor}
+        date={selectedDate.toISOString().split('T')[0]}
+        time={novoAgData.time}
+        professionals={professionals}
       />
     </div>
   );

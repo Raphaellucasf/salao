@@ -72,14 +72,33 @@ export async function requireAdmin(
     .from('users')
     .select('role')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
+
+  let role: string;
 
   if (roleError || !userRow) {
-    // Tabela users não tem a linha — fallback seguro para negar acesso
-    return NextResponse.json({ error: 'Não autorizado — perfil não encontrado' }, { status: 403 });
+    // Fallback: linha não encontrada em public.users
+    // Verifica user_metadata como segunda fonte confiável (definida pelo admin ao criar usuário)
+    const metaRole = user.user_metadata?.role as string | undefined;
+    if (metaRole === 'admin') {
+      // Auto-cria a linha em public.users para evitar problema nas próximas requisições
+      await adminSupabase.from('users').upsert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name ?? user.email,
+        role: 'admin',
+      });
+      role = 'admin';
+    } else {
+      // Sem linha em users e sem metadata de admin — acesso negado
+      return NextResponse.json(
+        { error: 'Não autorizado — perfil não encontrado' },
+        { status: 403 }
+      );
+    }
+  } else {
+    role = userRow.role as string;
   }
-
-  const role = userRow.role as string;
 
   if (role !== 'admin') {
     return NextResponse.json(

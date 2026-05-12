@@ -10,6 +10,7 @@ import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import GrupoServicoModal from '@/components/modals/GrupoServicoModal';
 import PacoteServicoModal from '@/components/modals/PacoteServicoModal';
+import { ServicoModal } from '@/components/modals/ServicoModal';
 import { supabase } from '@/lib/supabase';
 import { withAdminOnly } from '@/components/auth/withAdminOnly';
 
@@ -26,7 +27,9 @@ function ServicosNewPage() {
 
   const [grupoModalOpen, setGrupoModalOpen] = useState(false);
   const [pacoteModalOpen, setPacoteModalOpen] = useState(false);
+  const [servicoModalOpen, setServicoModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedServico, setSelectedServico] = useState<any>(null);
 
   const [stats, setStats] = useState({
     totalServicos: 0,
@@ -145,6 +148,12 @@ function ServicosNewPage() {
           </div>
           
           <div className="flex gap-3">
+            {activeView === 'servicos' && (
+              <Button onClick={() => { setSelectedServico(null); setServicoModalOpen(true); }}>
+                <Plus className="w-5 h-5 mr-2" />
+                Novo Serviço
+              </Button>
+            )}
             {activeView === 'pacotes' && (
               <Button onClick={() => { setSelectedItem(null); setPacoteModalOpen(true); }}>
                 <Plus className="w-5 h-5 mr-2" />
@@ -305,6 +314,16 @@ function ServicosNewPage() {
                 <option value="inativos">Inativos</option>
                 <option value="todos">Todos</option>
               </select>
+
+              {activeView === 'servicos' && (
+                <button
+                  onClick={() => { setSelectedServico(null); setServicoModalOpen(true); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  Novo Serviço
+                </button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -533,6 +552,12 @@ function ServicosNewPage() {
       </div>
 
       {/* Modals */}
+      <ServicoModal
+        isOpen={servicoModalOpen}
+        onClose={() => { setServicoModalOpen(false); setSelectedServico(null); }}
+        servico={selectedServico}
+        onSuccess={loadData}
+      />
       <GrupoServicoModal
         isOpen={grupoModalOpen}
         onClose={() => { setGrupoModalOpen(false); setSelectedItem(null); }}

@@ -20,6 +20,7 @@ import {
   ClipboardList
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { useState } from 'react';
 import { useCadastrosPendentes } from '@/hooks/useCadastrosPendentes';
 
@@ -48,6 +49,7 @@ const sidebarItems: SidebarItem[] = [
 export default function AdminSidebarNew() {
   const pathname = usePathname();
   const { user, signOut, isAdmin } = useAuth();
+  const { nomeRole } = usePermissoes();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { count: pendentesCount } = useCadastrosPendentes();
 
@@ -102,7 +104,7 @@ export default function AdminSidebarNew() {
                 {user?.full_name || 'Usuário'}
               </p>
               <p className="text-xs text-neutral-500 truncate">
-                {isAdmin ? 'Administrador' : 'Usuário'}
+                {nomeRole || (isAdmin ? 'Administrador' : 'Usuário')}
               </p>
             </div>
           </div>

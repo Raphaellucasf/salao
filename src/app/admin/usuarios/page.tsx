@@ -1,11 +1,10 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withAdminOnly } from '@/components/auth/withAdminOnly';
 import { Users, Shield, Mail, Phone, Calendar, Search, Plus, Pencil, Trash2, Key } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import UsuarioModal from '@/components/modals/UsuarioModal';
 
@@ -18,6 +17,7 @@ interface Usuario {
   data_nascimento: string;
   ativo: boolean;
   role_id: string;
+  auth_id: string;
   roles: {
     nome: string;
     cor: string;
@@ -36,8 +36,8 @@ function UsuariosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
   const [roles, setRoles] = useState<any[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null); // ID sendo confirmado para excluir
 
-  // Stats
   const [stats, setStats] = useState({
     totalUsuarios: 0,
     usuariosAtivos: 0,
@@ -52,37 +52,33 @@ function UsuariosPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Carregar usuários
-      const { data: usuariosData, error: usuariosError } = await supabase
-        .from('usuarios')
-        .select(`
-          *,
-          roles (
-            nome,
-            cor,
-            nivel
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (usuariosError) throw usuariosError;
-
-      if (usuariosData) {
-        setUsuarios(usuariosData as any);
-
-        // Calcular stats
-        const hoje = new Date().toISOString().split('T')[0];
-        setStats({
-          totalUsuarios: usuariosData.length,
-          usuariosAtivos: (usuariosData as any[]).filter((u) => u.ativo).length,
-          usuariosInativos: (usuariosData as any[]).filter((u) => !u.ativo).length,
-          acessosHoje: (usuariosData as any[]).filter(
-            (u) => u.ultimo_acesso && u.ultimo_acesso.startsWith(hoje)
-          ).length,
-        });
+      // Busca via API route (service_role) — bypassa RLS
+      const res = await fetch('/api/admin/get-users');
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao carregar usuários');
       }
+      const { usuarios: usuariosData } = await res.json();
 
-      // Carregar roles
+      setUsuarios(usuariosData);
+
+      const hoje = new Date().toISOString().split('T')[0];
+      setStats({
+        totalUsuarios: usuariosData.length,
+        usuariosAtivos: usuariosData.filter((u: any) => u.ativo).length,
+        usuariosInativos: usuariosData.filter((u: any) => !u.ativo).length,
+        acessosHoje: usuariosData.filter(
+          (u: any) => u.ultimo_acesso && u.ultimo_acesso.startsWith(hoje)
+        ).length,
+      });
+
+      // Extrai roles únicas dos usuários carregados
+      const rolesMap = new Map<string, any>();
+      usuariosData.forEach((u: any) => {
+        if (u.role_id && u.roles) rolesMap.set(u.role_id, { id: u.role_id, ...u.roles });
+      });
+
+      // Também carrega roles disponíveis para o filtro
       const { data: rolesData } = await supabase
         .from('roles')
         .select('*')
@@ -107,13 +103,25 @@ function UsuariosPage() {
     setModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
+  // Estágio 1: mostra confirmação inline
+  const handleDelete = (id: string) => {
+    setDeletingId(id);
+    // Auto-cancela após 4 segundos se não confirmar
+    setTimeout(() => setDeletingId(prev => prev === id ? null : prev), 4000);
+  };
 
+  // Estágio 2: executa a exclusão real
+  const handleConfirmDelete = async (id: string, authId?: string) => {
+    setDeletingId(null);
     try {
-      const { error } = await supabase.from('usuarios').delete().eq('id', id);
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, authId: authId || null }),
+      });
 
-      if (error) throw error;
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Erro ao excluir usuário');
 
       loadData();
     } catch (error: any) {
@@ -125,18 +133,21 @@ function UsuariosPage() {
     if (!confirm(`Resetar senha de ${usuario.nome}? Uma senha temporária será gerada.`)) return;
 
     try {
-      const senhaTempor = Math.random().toString(36).slice(-8);
-      
-      const { error } = await supabase
-        .from('usuarios')
-        // @ts-ignore - usuarios table not in types
-        .update({
-          senha_hash: `$2a$10$${senhaTempor}`,
-          senha_temporaria: true,
-        })
-        .eq('id', usuario.id);
+      if (!usuario.auth_id) {
+        alert('Este usuário não possui auth_id vinculado. Recrie o usuário para habilitar o reset de senha.');
+        return;
+      }
 
-      if (error) throw error;
+      const senhaTempor = Math.random().toString(36).slice(-8) + 'A1!';
+
+      const res = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authId: usuario.auth_id, novaSenha: senhaTempor }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Erro ao resetar senha');
 
       alert(`Senha resetada com sucesso!\n\nSenha temporária: ${senhaTempor}\n\nO usuário deverá trocar a senha no próximo login.`);
       loadData();
@@ -148,8 +159,8 @@ function UsuariosPage() {
   // Filtros
   const usuariosFiltrados = usuarios.filter((usuario) => {
     const matchSearch =
-      usuario.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      usuario.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      usuario.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      usuario.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       usuario.cpf?.includes(searchTerm);
 
     const matchRole = !filterRole || usuario.role_id === filterRole;
@@ -161,12 +172,6 @@ function UsuariosPage() {
 
     return matchSearch && matchRole && matchStatus;
   });
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR');
-  };
 
   const formatDateTime = (dateString: string) => {
     if (!dateString) return 'Nunca';
@@ -379,13 +384,35 @@ function UsuariosPage() {
                         >
                           <Pencil size={18} />
                         </button>
-                        <button
-                          onClick={() => handleDelete(usuario.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Excluir"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+
+                        {deletingId === usuario.id ? (
+                          // Confirmação inline — sem window.confirm()
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-red-600 font-medium">Excluir?</span>
+                            <button
+                              onClick={() => handleConfirmDelete(usuario.id, usuario.auth_id)}
+                              className="p-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs font-bold"
+                              title="Confirmar exclusão"
+                            >
+                              Sim
+                            </button>
+                            <button
+                              onClick={() => setDeletingId(null)}
+                              className="p-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-xs"
+                              title="Cancelar"
+                            >
+                              Não
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleDelete(usuario.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
