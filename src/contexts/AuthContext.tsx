@@ -135,6 +135,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) return { error };
 
       if (data?.user) {
+        // Verifica se precisa trocar senha antes de redirecionar
+        if (data.user.user_metadata?.must_change_password === true) {
+          setTimeout(() => window.location.replace('/trocar-senha'), 100);
+          return { error: null };
+        }
+
         const { role: userRole, full_name } = await fetchUserRole(
           data.user.id,
           data.user.user_metadata,
