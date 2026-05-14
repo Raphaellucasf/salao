@@ -201,9 +201,10 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
 
         if (error) throw error;
       } else {
+        const novoId = crypto.randomUUID();
         const { data: novoServico, error } = await supabase
           .from('servicos')
-          .insert(dados)
+          .insert({ ...dados, id: novoId })
           .select()
           .single();
 
