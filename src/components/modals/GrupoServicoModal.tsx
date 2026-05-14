@@ -169,7 +169,7 @@ export default function GrupoServicoModal({ isOpen, onClose, grupo, onSave }: Gr
       } else {
         const { error: insertError } = await supabase
           .from('grupos_servicos')
-          .insert([formData as any]);
+          .insert([{ id: crypto.randomUUID(), ...formData } as any]);
 
         if (insertError) throw insertError;
       }
