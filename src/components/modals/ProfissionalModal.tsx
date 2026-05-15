@@ -353,7 +353,7 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
         // Criar novo profissional
         const { error: insertError } = await supabase
           .from('profissionais')
-          .insert([dataToSave]);
+          .insert([{ ...dataToSave, id: crypto.randomUUID() }]);
 
         if (insertError) throw insertError;
       }

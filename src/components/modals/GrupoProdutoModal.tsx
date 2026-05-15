@@ -90,7 +90,7 @@ export default function GrupoProdutoModal({ isOpen, onClose, grupo, onSave }: Gr
       } else {
         const { error: insertError } = await supabase
           .from('grupos_produtos')
-          .insert([dataToSave] as any);
+          .insert([{ ...dataToSave, id: crypto.randomUUID() }] as any);
 
         if (insertError) throw insertError;
       }
@@ -191,4 +191,3 @@ export default function GrupoProdutoModal({ isOpen, onClose, grupo, onSave }: Gr
     </Modal>
   );
 }
-

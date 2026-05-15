@@ -121,7 +121,7 @@ export default function FornecedorModal({ isOpen, onClose, fornecedor, onSave }:
       } else {
         const { error: insertError } = await supabase
           .from('fornecedores')
-          .insert([dataToSave] as any);
+          .insert([{ ...dataToSave, id: crypto.randomUUID() }] as any);
 
         if (insertError) throw insertError;
       }
@@ -304,4 +304,3 @@ export default function FornecedorModal({ isOpen, onClose, fornecedor, onSave }:
     </Modal>
   );
 }
-

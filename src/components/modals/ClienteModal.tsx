@@ -95,8 +95,10 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave, titulo 
           .insert([{
             nome: formData.nome,
             telefone: formData.telefone,
-            email: formData.email,
-            status: formData.status,
+            email: formData.email?.trim() || null,
+            status: formData.status || 'ativo',
+            cpf: formData.cpf?.trim() || null,
+            data_nascimento: formData.data_nascimento || null,
           }]);
 
         if (insertError) throw insertError;
