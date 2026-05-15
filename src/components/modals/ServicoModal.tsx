@@ -236,6 +236,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         .eq('servico_id', servicoId);
 
       const etapasParaSalvar = etapas.map((etapa, index) => ({
+        id: crypto.randomUUID(),
         servico_id: servicoId,
         ordem: index + 1,
         nome: etapa.nome,
