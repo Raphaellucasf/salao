@@ -63,7 +63,7 @@ export default function OrcamentoModal({ isOpen, onClose, clienteId, orcamento, 
       } else {
         const { data: orcamentoData, error: insertError } = await supabase
           .from('orcamentos')
-          .insert([dataToSave])
+          .insert([{ ...dataToSave, id: crypto.randomUUID() }])
           .select()
           .single();
 
@@ -71,6 +71,7 @@ export default function OrcamentoModal({ isOpen, onClose, clienteId, orcamento, 
 
         // Inserir itens
         const itensToInsert = itens.map(item => ({
+          id: crypto.randomUUID(),
           orcamento_id: orcamentoData.id,
           ...item,
           valor_total: item.quantidade * item.valor_unitario - item.desconto,
@@ -262,4 +263,3 @@ export default function OrcamentoModal({ isOpen, onClose, clienteId, orcamento, 
     </Modal>
   );
 }
-

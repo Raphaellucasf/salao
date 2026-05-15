@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { supabase } from '@/lib/supabase';
 
 interface ContaReceberModalProps {
@@ -56,7 +55,6 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
         .from('clientes')
         .select('*')
         .order('nome');
-
       if (error) throw error;
       setClientes(data || []);
     } catch (err) {
@@ -87,6 +85,7 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
         .from('contas_receber')
         .insert([{
           ...formData,
+          id: crypto.randomUUID(),
           cliente_nome: cliente?.nome || '',
           valor_pendente: formData.valor_total,
           status: 'pendente',
@@ -111,10 +110,10 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
     if (!conta) return;
 
     try {
-      // Registrar recebimento
       const { error: recebError } = await supabase
         .from('conta_recebimentos')
         .insert([{
+          id: crypto.randomUUID(),
           conta_id: conta.id,
           valor: recebimento.valor,
           metodo_pagamento: recebimento.metodo_pagamento,
@@ -123,11 +122,10 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
 
       if (recebError) throw recebError;
 
-      // Atualizar conta
       const valorPago = conta.valor_pago + recebimento.valor;
       const valorPendente = conta.valor_total - valorPago;
       let status = 'pendente';
-      
+
       if (valorPendente <= 0) {
         status = 'pago';
       } else if (valorPago > 0) {
@@ -136,11 +134,7 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
 
       const { error: updateError } = await supabase
         .from('contas_receber')
-        .update({
-          valor_pago: valorPago,
-          valor_pendente: valorPendente,
-          status: status,
-        })
+        .update({ valor_pago: valorPago, valor_pendente: valorPendente, status })
         .eq('id', conta.id);
 
       if (updateError) throw updateError;
@@ -156,19 +150,12 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
 
   if (mode === 'receive' && conta) {
     return (
-      <Modal 
-        isOpen={isOpen} 
-        onClose={onClose} 
-        title="Receber Débito"
-      >
+      <Modal isOpen={isOpen} onClose={onClose} title="Receber Débito">
         <form onSubmit={handleSubmitReceive} className="space-y-4">
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-              {error}
-            </div>
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>
           )}
 
-          {/* Informações da Conta */}
           <div className="p-4 bg-neutral-50 rounded-lg space-y-2">
             <div className="flex justify-between">
               <span className="text-sm text-neutral-600">Cliente:</span>
@@ -204,13 +191,11 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
           />
 
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Método de Pagamento
-            </label>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">Método de Pagamento</label>
             <select
               value={recebimento.metodo_pagamento}
               onChange={(e) => setRecebimento({ ...recebimento, metodo_pagamento: e.target.value })}
-              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             >
               <option value="Dinheiro">Dinheiro</option>
               <option value="PIX">PIX</option>
@@ -221,34 +206,21 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-2">
-              Observações
-            </label>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">Observações</label>
             <textarea
               value={recebimento.observacoes}
               onChange={(e) => setRecebimento({ ...recebimento, observacoes: e.target.value })}
               rows={2}
-              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500"
               placeholder="Observações..."
             />
           </div>
 
           <div className="flex gap-3 pt-4 border-t">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              className="flex-1"
-              disabled={loading}
-            >
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1" disabled={loading}>
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1"
-              disabled={loading}
-            >
+            <Button type="submit" variant="primary" className="flex-1" disabled={loading}>
               {loading ? 'Processando...' : 'Confirmar Recebimento'}
             </Button>
           </div>
@@ -258,33 +230,23 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
   }
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      title="Nova Conta a Receber"
-    >
+    <Modal isOpen={isOpen} onClose={onClose} title="Nova Conta a Receber">
       <form onSubmit={handleSubmitCreate} className="space-y-4">
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-            {error}
-          </div>
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>
         )}
 
         <div>
-          <label className="block text-sm font-medium text-neutral-700 mb-2">
-            Cliente
-          </label>
+          <label className="block text-sm font-medium text-neutral-700 mb-2">Cliente</label>
           <select
             value={formData.cliente_id}
             onChange={(e) => setFormData({ ...formData, cliente_id: e.target.value })}
             required
-            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500"
           >
             <option value="">Selecione um cliente</option>
             {clientes.map(cliente => (
-              <option key={cliente.id} value={cliente.id}>
-                {cliente.nome}
-              </option>
+              <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>
             ))}
           </select>
         </div>
@@ -309,7 +271,6 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
             onChange={(e) => setFormData({ ...formData, valor_total: parseFloat(e.target.value) || 0 })}
             placeholder="0.00"
           />
-
           <Input
             label="Data de Vencimento"
             type="date"
@@ -320,34 +281,21 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-neutral-700 mb-2">
-            Observações
-          </label>
+          <label className="block text-sm font-medium text-neutral-700 mb-2">Observações</label>
           <textarea
             value={formData.observacoes}
             onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
             rows={2}
-            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             placeholder="Observações adicionais..."
           />
         </div>
 
         <div className="flex gap-3 pt-4 border-t">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-            className="flex-1"
-            disabled={loading}
-          >
+          <Button type="button" variant="secondary" onClick={onClose} className="flex-1" disabled={loading}>
             Cancelar
           </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            className="flex-1"
-            disabled={loading}
-          >
+          <Button type="submit" variant="primary" className="flex-1" disabled={loading}>
             {loading ? 'Salvando...' : 'Criar Conta'}
           </Button>
         </div>
@@ -355,4 +303,3 @@ export default function ContaReceberModal({ isOpen, onClose, conta, onSave, mode
     </Modal>
   );
 }
-

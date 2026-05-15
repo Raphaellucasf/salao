@@ -81,6 +81,7 @@ export default function NovoAgendamentoModal({
       const { data: novoAg, error: agError } = await supabase
         .from('agendamentos')
         .insert([{
+          id: crypto.randomUUID(),
           cliente_id: clienteSel?.id || null,
           cliente_nome: clienteSel?.nome || searchCliente.trim(),
           profissional_id: profId,
@@ -101,6 +102,7 @@ export default function NovoAgendamentoModal({
       const { data: novaComanda, error: cmdError } = await supabase
         .from('comandas')
         .insert([{
+          id: crypto.randomUUID(),
           cliente_id: clienteSel?.id || null,
           cliente_nome: clienteSel?.nome || searchCliente.trim(),
           profissional_id: profId,
@@ -117,6 +119,7 @@ export default function NovoAgendamentoModal({
       // 3. Criar os itens da comanda (um por serviço selecionado)
       if (servicosSel.length > 0 && novaComanda) {
         const itens = servicosSel.map(s => ({
+          id: crypto.randomUUID(),
           comanda_id: novaComanda.id,
           tipo: 'servico' as const,
           item_id: String(s.id),

@@ -111,7 +111,7 @@ export default function ChequeModal({ isOpen, onClose, cheque, onSave }: ChequeM
         const { error: insertError } = await supabase
           .from('cheques')
           // @ts-ignore - cheques table not in types
-          .insert([formData]);
+          .insert([{ ...formData, id: crypto.randomUUID() }]);
 
         if (insertError) throw insertError;
       }

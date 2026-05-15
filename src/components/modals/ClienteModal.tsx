@@ -93,6 +93,7 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave, titulo 
         const { error: insertError } = await supabase
           .from('clientes')
           .insert([{
+            id: crypto.randomUUID(),
             nome: formData.nome,
             telefone: formData.telefone,
             email: formData.email?.trim() || null,
