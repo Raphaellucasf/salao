@@ -91,16 +91,43 @@ function ServicosNewPage() {
     }
   };
 
+  const deleteServico = async (id: string) => {
+    const { error: etapasError } = await supabase.from('servico_etapas').delete().eq('servico_id', id);
+    if (etapasError) throw etapasError;
+    const { error } = await supabase.from('servicos').delete().eq('id', id);
+    if (error) throw error;
+  };
+
+  const deleteGrupo = async (id: string) => {
+    const { data: vinculados, error: checkError } = await supabase.from('servicos').select('id').eq('grupo_id', id);
+    if (checkError) throw checkError;
+    if (vinculados && vinculados.length > 0) {
+      throw new Error(`Não é possível excluir este grupo pois existem ${vinculados.length} serviço(s) cadastrado(s) nele. Delete ou realoque os serviços primeiro.`);
+    }
+    const { error } = await supabase.from('grupos_servicos').delete().eq('id', id);
+    if (error) throw error;
+  };
+
   const handleDelete = async (type: 'servico' | 'pacote' | 'grupo', id: string) => {
-    if (!confirm('Tem certeza que deseja excluir?')) return;
+    const nomes = { servico: 'serviço', pacote: 'pacote', grupo: 'grupo' };
+    if (!confirm(`Tem certeza que deseja excluir este ${nomes[type]}?`)) return;
 
     try {
-      const table = type === 'servico' ? 'servicos' : type === 'pacote' ? 'pacotes_servicos' : 'grupos_servicos';
-      const { error } = await supabase.from(table).delete().eq('id', id);
-      if (error) throw error;
+      if (type === 'servico') await deleteServico(id);
+      else if (type === 'grupo') await deleteGrupo(id);
+      else {
+        const { error } = await supabase.from('pacotes_servicos').delete().eq('id', id);
+        if (error) throw error;
+      }
       loadData();
     } catch (error: any) {
-      alert(error.message || 'Erro ao excluir');
+      console.error('Erro ao excluir:', error);
+      const msg: string = error?.message || '';
+      if (msg) {
+        alert(msg);
+      } else {
+        alert('Erro ao excluir. Tente novamente.');
+      }
     }
   };
 
@@ -397,6 +424,13 @@ function ServicosNewPage() {
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => { setSelectedServico(servico); setServicoModalOpen(true); }}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Editar serviço"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
                               <button
                                 onClick={() => handleDelete('servico', servico.id)}
                                 className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"

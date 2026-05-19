@@ -166,6 +166,16 @@ export default function GrupoServicoModal({ isOpen, onClose, grupo, onSave }: Gr
           .eq('id', grupo.id);
 
         if (updateError) throw updateError;
+
+        // Se o status "ativo" do grupo mudou, propaga para todos os serviços do grupo
+        if (formData.ativo !== grupo.ativo) {
+          const { error: servicosError } = await supabase
+            .from('servicos')
+            .update({ ativo: formData.ativo } as any)
+            .eq('grupo_id', grupo.id);
+
+          if (servicosError) throw servicosError;
+        }
       } else {
         const { error: insertError } = await supabase
           .from('grupos_servicos')
@@ -376,7 +386,7 @@ export default function GrupoServicoModal({ isOpen, onClose, grupo, onSave }: Gr
           />
           <label htmlFor="ativo" className="flex-1">
             <div className="text-sm font-medium text-neutral-900">Grupo Ativo</div>
-            <div className="text-xs text-neutral-600">Grupo disponível para novos serviços</div>
+            <div className="text-xs text-neutral-600">Ativar/desativar o grupo também altera o status de todos os serviços vinculados</div>
           </label>
         </div>
 

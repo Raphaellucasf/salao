@@ -33,6 +33,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
   const [duracaoCalculada, setDuracaoCalculada] = useState(false);
   const [etapas, setEtapas] = useState<any[]>([]);
   const [grupos, setGrupos] = useState<any[]>([]);
+  const [usaProdutos, setUsaProdutos] = useState(false);
 
   const resetForm = useCallback(() => {
     setCodigo('');
@@ -48,6 +49,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     setTemEtapas(false);
     setDuracaoCalculada(false);
     setEtapas([]);
+    setUsaProdutos(false);
   }, []);
 
   useEffect(() => {
@@ -66,6 +68,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
       setAtivo(servico.ativo !== false);
       setObservacoes(servico.observacoes || '');
       setGrupoId(servico.grupo_id || '');
+      setUsaProdutos(servico.usa_produtos === true);
       // Não seta temEtapas aqui - será setado ao carregar etapas
       // duracaoCalculada será definido ao carregar etapas (sempre true se tiver etapas)
       
@@ -188,7 +191,8 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         observacoes,
         grupo_id: grupoId,
         tem_etapas: temEtapas,
-        duracao_calculada: temEtapas ? duracaoCalculada : false
+        duracao_calculada: temEtapas ? duracaoCalculada : false,
+        usa_produtos: usaProdutos
       };
 
       let servicoId = servico?.id;
@@ -225,7 +229,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     } finally {
       setLoading(false);
     }
-  }, [nome, preco, grupoId, codigo, descricao, termosBusca, termoInput, duracao, ativo, observacoes, servico, temEtapas, duracaoCalculada, etapas, onSuccess, handleClose]);
+  }, [nome, preco, grupoId, codigo, descricao, termosBusca, termoInput, duracao, ativo, observacoes, servico, temEtapas, duracaoCalculada, etapas, usaProdutos, onSuccess, handleClose]);
 
   const salvarEtapas = async (servicoId: string) => {
     try {
@@ -450,6 +454,17 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
             className="w-full px-3 py-2 border rounded-lg resize-none"
             rows={2}
           />
+        </div>
+
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="usa_produtos"
+            checked={usaProdutos}
+            onChange={(e) => setUsaProdutos(e.target.checked)}
+            className="mr-2"
+          />
+          <label htmlFor="usa_produtos" className="text-sm font-medium">Utiliza produtos durante a execução</label>
         </div>
 
         <div className="flex items-center">
