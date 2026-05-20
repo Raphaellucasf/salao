@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DEFAULT_UNIT_ID } from '@/services/caixa';
+import { registrarCompraPacote, debitarSessaoPorServico } from '@/services/pacotes';
 import { toast } from 'sonner';
 
 interface ComandaViewDrawerProps {
@@ -336,52 +337,35 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
         // Ignora se tabela estoque_movimentacoes não existir
       }
 
-      // Pacotes pré-pagos — em try/catch isolado
+      // Pacotes pré-pagos — em try/catch isolado para não bloquear o fechamento
       try {
         const itensPacote = (comanda.comanda_itens || []).filter(
           (item: any) => item.tipo === 'pacote' && item.item_id,
         );
         if (itensPacote.length > 0 && comanda.cliente_id) {
-          try {
-            await fetch('/api/admin/pacotes/cliente', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                comandaId: comanda.id,
-                clienteId: comanda.cliente_id,
-                clienteCpf: comanda.cliente?.cpf,
-                itensPacote
-              })
-            });
-          } catch (err) {
-            console.error('Erro ao vincular pacote:', err);
-          }
+          await registrarCompraPacote({
+            comandaId: comanda.id,
+            clienteId: comanda.cliente_id,
+            clienteCpf: comanda.cliente?.cpf ?? null,
+            itensPacote: itensPacote.map((i: any) => ({ item_id: i.item_id, quantidade: i.quantidade || 1 })),
+            unitId: DEFAULT_UNIT_ID,
+          });
         }
 
-        // T-08: Dar baixa nas sessões de pacote via API (bypass RLS)
+        // Dar baixa nas sessões de pacote usadas nesta comanda
         const servicosPacote = (comanda.comanda_itens || []).filter(
           (item: any) => item.tipo === 'servico' &&
             item.descricao?.includes('(Sess\u00e3o de Pacote)') &&
             item.valor_unitario === 0 &&
             item.item_id
         );
-
         for (const item of servicosPacote) {
-          try {
-            await fetch('/api/admin/pacotes/cliente', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                clienteId: comanda.cliente_id,
-                servicoId: item.item_id,
-                quantidade: item.quantidade || 1,
-              }),
-            });
-          } catch (err) {
-            console.error('Erro ao debitar sess\u00e3o do pacote:', err);
-          }
+          await debitarSessaoPorServico(
+            comanda.cliente_id,
+            item.item_id,
+            item.quantidade || 1,
+          ).catch((err: any) => console.error('Erro ao debitar sessão:', err));
         }
-
       } catch (err) {
         console.error('Erro ao processar pacotes:', err);
       }

@@ -76,7 +76,37 @@ export async function debitarSessaoPacote(pacoteId: string): Promise<boolean> {
 }
 
 /**
- * Registra a compra de um pacote de serviços, criando os registros de sessões
+ * Debita N sessões do pacote ativo mais antigo do cliente para um serviço.
+ * Usado ao fechar comanda com itens "(Sessão de Pacote)".
+ */
+export async function debitarSessaoPorServico(
+  clienteId: number,
+  servicoId: string,
+  quantidade = 1,
+): Promise<void> {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await supabase
+    .from('pacotes_cliente')
+    .select('id, sessoes_consumidas, sessoes_total')
+    .eq('cliente_id', clienteId)
+    .eq('servico_id', servicoId)
+    .or(`data_validade.is.null,data_validade.gte.${today}`)
+    .order('criado_em', { ascending: true });
+
+  if (error || !data) return;
+
+  let restante = quantidade;
+  for (const pk of data) {
+    if (restante <= 0) break;
+    if (pk.sessoes_consumidas >= pk.sessoes_total) continue;
+    const disponivel = pk.sessoes_total - pk.sessoes_consumidas;
+    const debitar = Math.min(restante, disponivel);
+    for (let i = 0; i < debitar; i++) {
+      await debitarSessaoPacote(pk.id).catch(() => null);
+    }
+    restante -= debitar;
+  }
+}
  * em pacotes_cliente. Chamado após salvar a comanda.
  */
 export async function registrarCompraPacote(params: {
