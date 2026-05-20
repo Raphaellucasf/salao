@@ -270,7 +270,7 @@ export default function ComandasPage() {
 
                 {/* Data */}
                 <div className="text-xs text-neutral-500">
-                  Aberta em: {new Date(comanda.data_abertura).toLocaleString('pt-BR')}
+                  Aberta em: {new Date(comanda.data_abertura || comanda.created_at).toLocaleString('pt-BR')}
                 </div>
 
                 {/* Ações */}
