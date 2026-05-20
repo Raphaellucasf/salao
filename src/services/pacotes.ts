@@ -107,6 +107,9 @@ export async function debitarSessaoPorServico(
     restante -= debitar;
   }
 }
+
+/**
+ * Registra a compra de um pacote de serviços, criando os registros de sessões
  * em pacotes_cliente. Chamado após salvar a comanda.
  */
 export async function registrarCompraPacote(params: {
