@@ -12,10 +12,10 @@ export async function POST(request: Request) {
     const { action, pacote, itens } = body;
 
     if (action === 'CREATE') {
-      // 1. Inserir pacote
+      // 1. Inserir pacote (gera UUID explicitamente para garantir compatibilidade com produção)
       const { data: newPacote, error: insertError } = await supabaseAdmin
         .from('pacotes_servicos')
-        .insert([pacote])
+        .insert([{ ...pacote, id: crypto.randomUUID() }])
         .select()
         .single();
 
@@ -25,6 +25,7 @@ export async function POST(request: Request) {
       if (itens && itens.length > 0) {
         const itensPayload = itens.map((item: any) => ({
           ...item,
+          id: crypto.randomUUID(),
           pacote_id: newPacote.id
         }));
         
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       if (itens && itens.length > 0) {
         const itensPayload = itens.map((item: any) => ({
           ...item,
+          id: crypto.randomUUID(),
           pacote_id: id
         }));
         
