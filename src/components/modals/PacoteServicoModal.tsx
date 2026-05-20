@@ -79,14 +79,11 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
 
   const loadPacoteItens = async (pacoteId: string) => {
     try {
-      const { data } = await supabase
-        .from('pacotes_servicos_itens')
-        .select('*, servicos(*)')
-        .eq('pacote_id', pacoteId)
-        .order('ordem');
-      
-      if (data) {
-        setServicosSelecionados(data.map((item: any) => ({
+      const res = await fetch(`/api/admin/pacotes?id=${pacoteId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.pacotes_servicos_itens) {
+        setServicosSelecionados(data.pacotes_servicos_itens.map((item: any) => ({
           servico_id: item.servico_id,
           quantidade: item.quantidade,
           ordem: item.ordem,
