@@ -21,6 +21,7 @@ export async function verificarPacoteAtivo(
 
   try {
     const today = new Date().toISOString().split('T')[0];
+    console.log('[pacotes] verificarPacoteAtivo →', { cliente_id, servico_id, today });
 
     let query = supabase
       .from('pacotes_cliente')
@@ -33,9 +34,11 @@ export async function verificarPacoteAtivo(
     }
 
     const { data, error } = await query;
+    console.log('[pacotes] pacotes_cliente raw:', { data, error });
     if (error) throw error;
 
     const pacotesComSaldo = (data || []).filter((p: any) => p.sessoes_consumidas < p.sessoes_total);
+    console.log('[pacotes] pacotesComSaldo:', pacotesComSaldo);
     if (pacotesComSaldo.length === 0) return [];
 
     const servicoIds = [...new Set(pacotesComSaldo.map((p: any) => p.servico_id as string))];
@@ -47,7 +50,7 @@ export async function verificarPacoteAtivo(
     const nomeMap: Record<string, string> = {};
     (servicosData ?? []).forEach((s: any) => { nomeMap[s.id] = s.nome; });
 
-    return pacotesComSaldo.map((p: any) => ({
+    const resultado = pacotesComSaldo.map((p: any) => ({
       id: p.id,
       servico_id: p.servico_id,
       servico_nome: nomeMap[p.servico_id] ?? 'Serviço',
@@ -55,8 +58,10 @@ export async function verificarPacoteAtivo(
       sessoes_total: p.sessoes_total,
       data_validade: p.data_validade ?? null,
     }));
+    console.log('[pacotes] resultado final:', resultado);
+    return resultado;
   } catch (error) {
-    console.error('Erro em verificarPacoteAtivo:', error);
+    console.error('[pacotes] Erro em verificarPacoteAtivo:', error);
     return [];
   }
 }
@@ -66,12 +71,12 @@ export async function verificarPacoteAtivo(
  * Retorna false se o saldo já estiver esgotado no momento do débito.
  */
 export async function debitarSessaoPacote(pacoteId: string): Promise<boolean> {
-  // UPDATE atômico: só executa se sessoes_consumidas < sessoes_total
+  console.log('[pacotes] debitarSessaoPacote →', pacoteId);
   const { data, error } = await (supabase as any).rpc('debitar_sessao_pacote', {
     p_pacote_id: pacoteId,
   });
+  console.log('[pacotes] debitarSessaoPacote resultado:', { data, error });
   if (error) throw error;
-  // A função retorna TRUE se debitou, FALSE se já estava esgotado
   return data === true;
 }
 
@@ -84,6 +89,7 @@ export async function debitarSessaoPorServico(
   servicoId: string,
   quantidade = 1,
 ): Promise<void> {
+  console.log('[pacotes] debitarSessaoPorServico →', { clienteId, servicoId, quantidade });
   const today = new Date().toISOString().split('T')[0];
   const { data, error } = await supabase
     .from('pacotes_cliente')
@@ -93,6 +99,7 @@ export async function debitarSessaoPorServico(
     .or(`data_validade.is.null,data_validade.gte.${today}`)
     .order('criado_em', { ascending: true });
 
+  console.log('[pacotes] pacotes candidatos ao débito:', { data, error });
   if (error || !data) return;
 
   let restante = quantidade;
@@ -102,7 +109,7 @@ export async function debitarSessaoPorServico(
     const disponivel = pk.sessoes_total - pk.sessoes_consumidas;
     const debitar = Math.min(restante, disponivel);
     for (let i = 0; i < debitar; i++) {
-      await debitarSessaoPacote(pk.id).catch(() => null);
+      await debitarSessaoPacote(pk.id).catch((e) => console.error('[pacotes] erro ao debitar:', e));
     }
     restante -= debitar;
   }
@@ -121,9 +128,11 @@ export async function registrarCompraPacote(params: {
 }): Promise<void> {
   const { comandaId, clienteId, clienteCpf, itensPacote, unitId } = params;
   if (!itensPacote || itensPacote.length === 0) return;
+  console.log('[pacotes] registrarCompraPacote →', { comandaId, clienteId, itensPacote, unitId });
 
   for (const item of itensPacote) {
     try {
+      console.log('[pacotes] buscando pacote_servico id:', item.item_id);
       // Busca o pacote e seus itens (serviços incluídos)
       const { data: pacoteData, error: pacoteError } = await supabase
         .from('pacotes_servicos')
@@ -131,13 +140,19 @@ export async function registrarCompraPacote(params: {
         .eq('id', item.item_id)
         .single();
 
+      console.log('[pacotes] pacote_servico resultado:', { pacoteData, pacoteError });
+
       if (pacoteError || !pacoteData) {
-        console.error('Pacote não encontrado:', item.item_id, pacoteError);
+        console.error('[pacotes] Pacote não encontrado:', item.item_id, pacoteError);
         continue;
       }
 
       const itens: any[] = (pacoteData as any).pacotes_servicos_itens ?? [];
-      if (itens.length === 0) continue;
+      console.log('[pacotes] itens do pacote:', itens);
+      if (itens.length === 0) {
+        console.warn('[pacotes] AVISO: pacote sem itens — nada será registrado em pacotes_cliente');
+        continue;
+      }
 
       const validadeDias: number | null = (pacoteData as any).validade_dias ?? null;
       const dataValidade = validadeDias
@@ -155,15 +170,20 @@ export async function registrarCompraPacote(params: {
         data_validade: dataValidade,
       }));
 
-      const { error: insertError } = await supabase
+      console.log('[pacotes] inserindo em pacotes_cliente:', pkRows);
+
+      const { data: insertData, error: insertError } = await supabase
         .from('pacotes_cliente')
-        .insert(pkRows);
+        .insert(pkRows)
+        .select();
+
+      console.log('[pacotes] resultado insert:', { insertData, insertError });
 
       if (insertError) {
-        console.error('Erro ao inserir pacote_cliente:', insertError);
+        console.error('[pacotes] Erro ao inserir pacote_cliente:', insertError);
       }
     } catch (e) {
-      console.error('Erro em registrarCompraPacote item:', item.item_id, e);
+      console.error('[pacotes] Erro em registrarCompraPacote item:', item.item_id, e);
     }
   }
 }
