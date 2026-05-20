@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, User, Scissors, Clock, Search, Calendar, ChevronDown } from 'lucide-react';
+import { verificarPacoteAtivo, debitarSessaoPacote, type PacoteAtivo } from '@/services/pacotes';
+import { X, User, Scissors, Clock, Search, Calendar, ChevronDown, Gift } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -16,7 +17,7 @@ interface Props {
 }
 
 interface Cliente { id: string; nome: string; telefone?: string; }
-interface Servico { id: string; nome: string; duracao_minutos: number; preco?: number; }
+interface Servico { id: string; nome: string; duracao_minutos: number; preco?: number; pacoteClienteId?: string; }
 
 export default function NovoAgendamentoModal({
   isOpen, onClose, onSuccess,
@@ -35,6 +36,7 @@ export default function NovoAgendamentoModal({
   const [searchS, setSearchS] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pacotesAtivos, setPacotesAtivos] = useState<PacoteAtivo[]>([]);
   const clienteRef = useRef<HTMLInputElement>(null);
   const debounce = useRef<NodeJS.Timeout>();
 
@@ -44,10 +46,23 @@ export default function NovoAgendamentoModal({
     setHoraInicio(time);
     setSearchCliente(''); setClienteSel(null); setServicosSel([]);
     setObservacoes(''); setClienteDropdown(false); setServicosOpen(false);
+    setPacotesAtivos([]);
     supabase.from('servicos').select('id,nome,duracao_minutos,preco').eq('ativo', true).order('nome')
       .then(({ data }) => { if (data) setServicos(data); });
     setTimeout(() => clienteRef.current?.focus(), 120);
   }, [isOpen, professionalId, time]);
+
+  useEffect(() => {
+    if (!clienteSel?.id) { setPacotesAtivos([]); return; }
+    verificarPacoteAtivo(Number(clienteSel.id)).then(setPacotesAtivos).catch(() => setPacotesAtivos([]));
+  }, [clienteSel]);
+
+  const usarSessaoPacote = (pacote: PacoteAtivo) => {
+    const srv = servicos.find(s => s.id === pacote.servico_id);
+    if (!srv) return;
+    if (servicosSel.some(s => s.id === srv.id && s.pacoteClienteId === pacote.id)) return;
+    setServicosSel(p => [...p, { ...srv, preco: 0, pacoteClienteId: pacote.id }]);
+  };
 
   const buscar = useCallback(async (q: string) => {
     if (q.length < 2) { setClientes([]); return; }
@@ -81,7 +96,6 @@ export default function NovoAgendamentoModal({
       const { data: novoAg, error: agError } = await supabase
         .from('agendamentos')
         .insert([{
-          id: crypto.randomUUID(),
           cliente_id: clienteSel?.id || null,
           cliente_nome: clienteSel?.nome || searchCliente.trim(),
           profissional_id: profId,
@@ -121,7 +135,7 @@ export default function NovoAgendamentoModal({
           comanda_id: novaComanda.id,
           tipo: 'servico' as const,
           item_id: String(s.id),
-          descricao: s.nome,
+          descricao: s.pacoteClienteId ? s.nome + ' (Sessão de Pacote)' : s.nome,
           quantidade: 1,
           valor_unitario: s.preco ?? 0,
           valor_total: s.preco ?? 0,
@@ -136,6 +150,12 @@ export default function NovoAgendamentoModal({
         .from('agendamentos')
         .update({ comanda_id: novaComanda.id, status: 'em_andamento' })
         .eq('id', novoAg.id);
+
+      // 5. Debitar sessões de pacotes usados
+      const itensPacote = servicosSel.filter(s => s.pacoteClienteId);
+      for (const item of itensPacote) {
+        try { await debitarSessaoPacote(item.pacoteClienteId!); } catch (e) { console.error('Erro ao debitar sessão:', e); }
+      }
 
       onSuccess(); onClose();
     } catch (e: any) { alert('Erro: ' + e.message); }
@@ -243,8 +263,13 @@ export default function NovoAgendamentoModal({
             {servicosSel.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {servicosSel.map(s => (
-                  <span key={s.id} onClick={() => toggle(s)}
-                    className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-800 text-xs px-2.5 py-1 rounded-full cursor-pointer hover:bg-blue-100 transition-colors">
+                  <span key={s.id + (s.pacoteClienteId ?? '')} onClick={() => toggle(s)}
+                    className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
+                      s.pacoteClienteId
+                        ? 'bg-green-50 border border-green-200 text-green-800 hover:bg-green-100'
+                        : 'bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100'
+                    }`}>
+                    {s.pacoteClienteId && <Gift className="w-3 h-3" />}
                     {s.nome} <X className="w-3 h-3" />
                   </span>
                 ))}
@@ -276,6 +301,32 @@ export default function NovoAgendamentoModal({
               </div>
             )}
           </div>
+
+          {/* Pacotes do Cliente */}
+          {pacotesAtivos.length > 0 && (
+            <div className="border border-green-200 rounded-xl overflow-hidden">
+              <div className="bg-green-50 px-3 py-2 border-b border-green-200 flex items-center gap-2">
+                <Gift className="w-4 h-4 text-green-600" />
+                <span className="text-xs font-semibold text-green-800 uppercase tracking-wide">Pacotes disponíveis</span>
+              </div>
+              <div className="divide-y divide-green-50 bg-white">
+                {pacotesAtivos.map(pacote => (
+                  <div key={pacote.id} className="flex items-center justify-between px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-neutral-900">{pacote.servico_nome}</p>
+                      <p className="text-xs text-neutral-500">
+                        <span className="font-semibold text-green-600">{pacote.sessoes_restantes}</span> sessão{pacote.sessoes_restantes !== 1 ? 'ões' : ''} disponível{pacote.sessoes_restantes !== 1 ? 'is' : ''}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => usarSessaoPacote(pacote)}
+                      className="text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg hover:bg-green-100 transition-colors">
+                      + Usar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Observações */}
           <div>

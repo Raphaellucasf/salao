@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import { DEFAULT_UNIT_ID } from './caixa';
 
 export interface PacoteAtivo {
   id: string;
@@ -11,7 +10,7 @@ export interface PacoteAtivo {
 }
 
 /**
- * Retorna os pacotes com saldo disponível para um dado CPF + serviço.
+ * Retorna os pacotes com saldo disponível para um cliente + serviço.
  * Se servico_id for omitido, retorna todos os pacotes ativos do cliente.
  */
 export async function verificarPacoteAtivo(
@@ -21,16 +20,41 @@ export async function verificarPacoteAtivo(
   if (!cliente_id) return [];
 
   try {
-    let url = `/api/admin/pacotes/cliente?clienteId=${cliente_id}`;
+    const today = new Date().toISOString().split('T')[0];
+
+    let query = supabase
+      .from('pacotes_cliente')
+      .select('id, servico_id, sessoes_total, sessoes_consumidas, data_validade')
+      .eq('cliente_id', cliente_id)
+      .or(`data_validade.is.null,data_validade.gte.${today}`);
+
     if (servico_id) {
-      url += `&servicoId=${servico_id}`;
+      query = (query as any).eq('servico_id', servico_id);
     }
 
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Erro ao buscar pacotes');
+    const { data, error } = await query;
+    if (error) throw error;
 
-    const pacotes = await res.json();
-    return Array.isArray(pacotes) ? pacotes : [];
+    const pacotesComSaldo = (data || []).filter((p: any) => p.sessoes_consumidas < p.sessoes_total);
+    if (pacotesComSaldo.length === 0) return [];
+
+    const servicoIds = [...new Set(pacotesComSaldo.map((p: any) => p.servico_id as string))];
+    const { data: servicosData } = await supabase
+      .from('servicos')
+      .select('id, nome')
+      .in('id', servicoIds);
+
+    const nomeMap: Record<string, string> = {};
+    (servicosData ?? []).forEach((s: any) => { nomeMap[s.id] = s.nome; });
+
+    return pacotesComSaldo.map((p: any) => ({
+      id: p.id,
+      servico_id: p.servico_id,
+      servico_nome: nomeMap[p.servico_id] ?? 'Serviço',
+      sessoes_restantes: p.sessoes_total - p.sessoes_consumidas,
+      sessoes_total: p.sessoes_total,
+      data_validade: p.data_validade ?? null,
+    }));
   } catch (error) {
     console.error('Erro em verificarPacoteAtivo:', error);
     return [];

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Plus, Trash2, ShoppingBag, Scissors, Package as PackageIcon, Gift, ClipboardList } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AtribuirEtapasServico from './AtribuirEtapasServico';
-import { verificarPacoteAtivo, type PacoteAtivo } from '@/services/pacotes';
+import { verificarPacoteAtivo, debitarSessaoPacote, type PacoteAtivo } from '@/services/pacotes';
 
 interface ComandaItem {
   id?: string;
@@ -21,6 +21,7 @@ interface ComandaItem {
   tem_etapas?: boolean;
   etapas?: any[];
   atribuicoes_etapas?: any[];
+  pacote_cliente_id?: string;
 }
 
 interface ComandaModalProps {
@@ -565,6 +566,12 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         await movimentarEstoque(itens, -1);
         await consumirInsumosServico(itens, -1);
 
+        // Debitar sessões de pacotes usadas nesta edição
+        const itensPacoteUsoUp = itens.filter(i => i.pacote_cliente_id);
+        for (const item of itensPacoteUsoUp) {
+          try { await debitarSessaoPacote(item.pacote_cliente_id!); } catch (e) { console.error('Erro ao debitar sessão de pacote:', e); }
+        }
+
         // Sincroniza servicos + cliente no agendamento vinculado
         const servicosJsonUp = itens
           .filter(i => i.tipo === 'servico' && i.item_id)
@@ -674,6 +681,29 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         // Debitar estoque dos itens produto na criação e insumos dos serviços
         await movimentarEstoque(itens, -1);
         await consumirInsumosServico(itens, -1);
+
+        // Registrar compra de pacotes vendidos nesta comanda
+        const itensPacoteCompra = itens.filter(i => i.tipo === 'pacote' && i.item_id);
+        if (itensPacoteCompra.length > 0) {
+          try {
+            await fetch('/api/admin/pacotes/cliente', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                comandaId: novaComanda.id,
+                clienteId: Number(formData.cliente_id),
+                clienteCpf: (cliente as any)?.cpf || null,
+                itensPacote: itensPacoteCompra.map(i => ({ item_id: i.item_id, quantidade: i.quantidade })),
+              }),
+            });
+          } catch (e) { console.error('Erro ao registrar compra de pacote:', e); }
+        }
+
+        // Debitar sessões de pacotes usadas nesta comanda
+        const itensPacoteUso = itens.filter(i => i.pacote_cliente_id);
+        for (const item of itensPacoteUso) {
+          try { await debitarSessaoPacote(item.pacote_cliente_id!); } catch (e) { console.error('Erro ao debitar sessão de pacote:', e); }
+        }
 
         // Sincroniza servicos + cliente no agendamento criado pelo trigger
         // (trigger dispara no INSERT, antes dos itens — precisa de update posterior)
