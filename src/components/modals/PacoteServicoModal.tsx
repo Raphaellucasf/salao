@@ -358,7 +358,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
               type="number"
               step="0.01"
               min="0"
-              value={formData.preco_total}
+              value={formData.preco_total || ''}
               onChange={(e) => setFormData({ ...formData, preco_total: parseFloat(e.target.value) || 0 })}
               required
               placeholder="0,00"
@@ -367,7 +367,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
               label="Validade (dias)"
               type="number"
               min="1"
-              value={formData.validade_dias}
+              value={formData.validade_dias || ''}
               onChange={(e) => setFormData({ ...formData, validade_dias: parseInt(e.target.value) || 30 })}
               placeholder="30"
             />
@@ -406,8 +406,9 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
               type="number"
               min="2"
               max="24"
-              value={formData.max_parcelas}
+              value={formData.max_parcelas || ''}
               onChange={(e) => setFormData({ ...formData, max_parcelas: parseInt(e.target.value) || 12 })}
+              placeholder="12"
             />
           )}
         </div>
