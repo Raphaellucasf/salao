@@ -74,3 +74,63 @@ export async function debitarSessaoPacote(pacoteId: string): Promise<boolean> {
   // A função retorna TRUE se debitou, FALSE se já estava esgotado
   return data === true;
 }
+
+/**
+ * Registra a compra de um pacote de serviços, criando os registros de sessões
+ * em pacotes_cliente. Chamado após salvar a comanda.
+ */
+export async function registrarCompraPacote(params: {
+  comandaId: number | null;
+  clienteId: number;
+  clienteCpf: string | null;
+  itensPacote: Array<{ item_id: string; quantidade: number }>;
+  unitId: string;
+}): Promise<void> {
+  const { comandaId, clienteId, clienteCpf, itensPacote, unitId } = params;
+  if (!itensPacote || itensPacote.length === 0) return;
+
+  for (const item of itensPacote) {
+    try {
+      // Busca o pacote e seus itens (serviços incluídos)
+      const { data: pacoteData, error: pacoteError } = await supabase
+        .from('pacotes_servicos')
+        .select('validade_dias, pacotes_servicos_itens(servico_id, quantidade)')
+        .eq('id', item.item_id)
+        .single();
+
+      if (pacoteError || !pacoteData) {
+        console.error('Pacote não encontrado:', item.item_id, pacoteError);
+        continue;
+      }
+
+      const itens: any[] = (pacoteData as any).pacotes_servicos_itens ?? [];
+      if (itens.length === 0) continue;
+
+      const validadeDias: number | null = (pacoteData as any).validade_dias ?? null;
+      const dataValidade = validadeDias
+        ? new Date(Date.now() + validadeDias * 86_400_000).toISOString().split('T')[0]
+        : null;
+
+      const pkRows = itens.map((ps: any) => ({
+        unit_id: unitId,
+        cliente_cpf: clienteCpf || null,
+        cliente_id: clienteId,
+        servico_id: ps.servico_id,
+        sessoes_total: (ps.quantidade || 1) * (item.quantidade || 1),
+        sessoes_consumidas: 0,
+        comanda_origem_id: comandaId,
+        data_validade: dataValidade,
+      }));
+
+      const { error: insertError } = await supabase
+        .from('pacotes_cliente')
+        .insert(pkRows);
+
+      if (insertError) {
+        console.error('Erro ao inserir pacote_cliente:', insertError);
+      }
+    } catch (e) {
+      console.error('Erro em registrarCompraPacote item:', item.item_id, e);
+    }
+  }
+}
