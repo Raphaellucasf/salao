@@ -106,7 +106,7 @@ export async function GET(request: Request) {
     } else {
       const { data, error } = await supabaseAdmin
         .from('pacotes_servicos')
-        .select('*')
+        .select('*, pacotes_servicos_itens(*, servicos(*))')
         .order('nome');
         
       if (error) throw error;

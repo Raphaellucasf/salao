@@ -57,7 +57,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
         observacoes: pacote.observacoes || '',
         termos_uso: pacote.termos_uso || '',
       });
-      loadPacoteItens(pacote.id);
+      loadPacoteItens(pacote);
     } else {
       resetForm();
     }
@@ -77,21 +77,16 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
     }
   };
 
-  const loadPacoteItens = async (pacoteId: string) => {
-    try {
-      const res = await fetch(`/api/admin/pacotes?id=${pacoteId}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data?.pacotes_servicos_itens) {
-        setServicosSelecionados(data.pacotes_servicos_itens.map((item: any) => ({
-          servico_id: item.servico_id,
-          quantidade: item.quantidade,
-          ordem: item.ordem,
-          servico: item.servicos,
-        })));
-      }
-    } catch (err) {
-      console.error('Erro ao carregar itens do pacote:', err);
+  const loadPacoteItens = (pacoteData: any) => {
+    if (pacoteData?.pacotes_servicos_itens?.length) {
+      setServicosSelecionados(pacoteData.pacotes_servicos_itens.map((item: any) => ({
+        servico_id: item.servico_id,
+        quantidade: item.quantidade,
+        ordem: item.ordem,
+        servico: item.servicos,
+      })));
+    } else {
+      setServicosSelecionados([]);
     }
   };
 
