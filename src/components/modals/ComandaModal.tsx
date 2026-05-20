@@ -683,22 +683,14 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
         await movimentarEstoque(itens, -1);
         await consumirInsumosServico(itens, -1);
 
-        // Registrar compra de pacotes vendidos nesta comanda
-        const itensPacoteCompra = itens.filter(i => i.tipo === 'pacote' && i.item_id);
-        if (itensPacoteCompra.length > 0) {
-          await registrarCompraPacote({
-            comandaId: novaComanda.id,
-            clienteId: Number(formData.cliente_id),
-            clienteCpf: (cliente as any)?.cpf || null,
-            itensPacote: itensPacoteCompra.map(i => ({ item_id: i.item_id!, quantidade: i.quantidade })),
-            unitId: DEFAULT_UNIT_ID,
-          });
-        }
-
-        // Debitar sessões de pacotes usadas nesta comanda
+        // Debitar sessões de pacotes usadas nesta comanda (compra de pacote é registrada só ao fechar)
         const itensPacoteUso = itens.filter(i => i.pacote_cliente_id);
+        console.log('[ComandaModal] itensPacoteUso para débito:', itensPacoteUso.map(i => ({ descricao: i.descricao, pacote_cliente_id: i.pacote_cliente_id })));
         for (const item of itensPacoteUso) {
-          try { await debitarSessaoPacote(item.pacote_cliente_id!); } catch (e) { console.error('Erro ao debitar sessão de pacote:', e); }
+          try {
+            const ok = await debitarSessaoPacote(item.pacote_cliente_id!);
+            console.log('[ComandaModal] debitarSessaoPacote resultado:', { pacote_cliente_id: item.pacote_cliente_id, ok });
+          } catch (e) { console.error('[ComandaModal] Erro ao debitar sessão de pacote:', e); }
         }
 
         // Sincroniza servicos + cliente no agendamento criado pelo trigger

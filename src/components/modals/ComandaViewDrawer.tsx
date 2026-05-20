@@ -352,20 +352,8 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
           });
         }
 
-        // Dar baixa nas sessões de pacote usadas nesta comanda
-        const servicosPacote = (comanda.comanda_itens || []).filter(
-          (item: any) => item.tipo === 'servico' &&
-            item.descricao?.includes('(Sess\u00e3o de Pacote)') &&
-            item.valor_unitario === 0 &&
-            item.item_id
-        );
-        for (const item of servicosPacote) {
-          await debitarSessaoPorServico(
-            comanda.cliente_id,
-            item.item_id,
-            item.quantidade || 1,
-          ).catch((err: any) => console.error('Erro ao debitar sessão:', err));
-        }
+        // Nota: débito de sessões acontece ao CRIAR a comanda (ComandaModal, via pacote_cliente_id)
+        //       Aqui registramos apenas a COMPRA de pacotes (tipo='pacote') ao fechar/pagar.
       } catch (err) {
         console.error('Erro ao processar pacotes:', err);
       }

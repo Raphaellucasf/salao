@@ -130,6 +130,19 @@ export async function registrarCompraPacote(params: {
   if (!itensPacote || itensPacote.length === 0) return;
   console.log('[pacotes] registrarCompraPacote →', { comandaId, clienteId, itensPacote, unitId });
 
+  // Guard: evita duplicação se fecharComanda for chamado mais de uma vez
+  if (comandaId) {
+    const { data: existing } = await supabase
+      .from('pacotes_cliente')
+      .select('id')
+      .eq('comanda_origem_id', comandaId)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      console.log('[pacotes] registrarCompraPacote: já registrado para comanda', comandaId, '— ignorando');
+      return;
+    }
+  }
+
   for (const item of itensPacote) {
     try {
       console.log('[pacotes] buscando pacote_servico id:', item.item_id);
