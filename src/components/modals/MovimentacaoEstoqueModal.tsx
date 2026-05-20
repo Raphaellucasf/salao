@@ -164,8 +164,9 @@ export default function MovimentacaoModal({ isOpen, onClose, produto, onSave }: 
             label={`Quantidade (${produto.unidade_medida})`}
             type="number"
             min="1"
-            value={formData.quantidade}
+            value={formData.quantidade || ''}
             onChange={(e) => setFormData({ ...formData, quantidade: parseInt(e.target.value) || 1 })}
+            placeholder="1"
             required
           />
 
@@ -173,8 +174,9 @@ export default function MovimentacaoModal({ isOpen, onClose, produto, onSave }: 
             label="Valor Unitário"
             type="number"
             step="0.01"
-            value={formData.valor_unitario}
+            value={formData.valor_unitario || ''}
             onChange={(e) => setFormData({ ...formData, valor_unitario: parseFloat(e.target.value) || 0 })}
+            placeholder="0,00"
           />
         </div>
 

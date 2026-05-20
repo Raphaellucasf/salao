@@ -360,7 +360,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave, default
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.preco_custo}
+                  value={formData.preco_custo || ''}
                   onChange={(e) => setFormData({ ...formData, preco_custo: parseFloat(e.target.value) || 0 })}
                   placeholder="0,00"
                 />
@@ -369,7 +369,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave, default
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.preco_venda}
+                  value={formData.preco_venda || ''}
                   onChange={(e) => setFormData({ ...formData, preco_venda: parseFloat(e.target.value) || 0 })}
                   required
                   placeholder="0,00"
@@ -414,7 +414,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave, default
                     step="0.01"
                     min="0"
                     max="100"
-                    value={formData.percentual_comissao}
+                    value={formData.percentual_comissao || ''}
                     onChange={(e) => setFormData({ ...formData, percentual_comissao: parseFloat(e.target.value) || 0 })}
                     placeholder="0,00"
                   />
@@ -432,7 +432,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave, default
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.quantidade}
+                  value={formData.quantidade || ''}
                   onChange={(e) => setFormData({ ...formData, quantidade: parseFloat(e.target.value) || 0 })}
                 />
                 <Input
@@ -440,7 +440,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave, default
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.quantidade_minima}
+                  value={formData.quantidade_minima || ''}
                   onChange={(e) => setFormData({ ...formData, quantidade_minima: parseFloat(e.target.value) || 0 })}
                 />
                 <div>

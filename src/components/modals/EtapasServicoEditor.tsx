@@ -162,7 +162,7 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
                 <Input
                   type="number"
                   placeholder="30"
-                  value={etapa.duracao_minutos}
+                  value={etapa.duracao_minutos || ''}
                   onChange={(e) => atualizarEtapa(index, 'duracao_minutos', parseInt(e.target.value) || 0)}
                   min="1"
                 />

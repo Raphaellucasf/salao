@@ -179,8 +179,9 @@ export default function FormaPagamentoModal({ isOpen, onClose, onSuccess, forma 
             <Input
               label="Ordem de Exibição"
               type="number"
-              value={ordem}
+              value={ordem || ''}
               onChange={(e) => setOrdem(parseInt(e.target.value) || 0)}
+              placeholder="0"
             />
 
             <div className="flex items-center pt-6">
@@ -215,10 +216,11 @@ export default function FormaPagamentoModal({ isOpen, onClose, onSuccess, forma 
                 <Input
                   label="Máximo de Parcelas"
                   type="number"
-                  value={maxParcelas}
+                  value={maxParcelas || ''}
                   onChange={(e) => setMaxParcelas(parseInt(e.target.value) || 1)}
                   min="1"
                   max="24"
+                  placeholder="1"
                 />
                 <Input
                   label="Valor Mínimo por Parcela"

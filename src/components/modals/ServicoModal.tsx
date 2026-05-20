@@ -41,7 +41,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     setDescricao('');
     setTermosBusca([]);
     setTermoInput('');
-    setDuracao('60');
+    setDuracao('');
     setPreco('');
     setAtivo(true);
     setObservacoes('');
