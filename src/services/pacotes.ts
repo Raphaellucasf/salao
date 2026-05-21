@@ -68,16 +68,41 @@ export async function verificarPacoteAtivo(
 
 /**
  * Debita 1 sessão do pacote de forma atômica.
- * Retorna false se o saldo já estiver esgotado no momento do débito.
+ * Usa UPDATE direto pelo cliente Supabase (evita dependência de RPC PostgreSQL).
+ * Retorna false se o saldo já estiver esgotado.
  */
 export async function debitarSessaoPacote(pacoteId: string): Promise<boolean> {
   console.log('[pacotes] debitarSessaoPacote →', pacoteId);
-  const { data, error } = await (supabase as any).rpc('debitar_sessao_pacote', {
-    p_pacote_id: pacoteId,
-  });
-  console.log('[pacotes] debitarSessaoPacote resultado:', { data, error });
-  if (error) throw error;
-  return data === true;
+
+  // 1. Lê o registro atual
+  const { data: pk, error: readError } = await supabase
+    .from('pacotes_cliente')
+    .select('id, sessoes_consumidas, sessoes_total')
+    .eq('id', pacoteId)
+    .single();
+
+  console.log('[pacotes] debitarSessaoPacote leitura:', { pk, readError });
+
+  if (readError || !pk) {
+    console.error('[pacotes] debitarSessaoPacote: registro não encontrado', pacoteId);
+    return false;
+  }
+
+  if (pk.sessoes_consumidas >= pk.sessoes_total) {
+    console.warn('[pacotes] debitarSessaoPacote: saldo esgotado', pk);
+    return false;
+  }
+
+  // 2. Incrementa sessoes_consumidas
+  const { error: updateError } = await supabase
+    .from('pacotes_cliente')
+    .update({ sessoes_consumidas: pk.sessoes_consumidas + 1 })
+    .eq('id', pacoteId);
+
+  console.log('[pacotes] debitarSessaoPacote update resultado:', { updateError });
+
+  if (updateError) throw updateError;
+  return true;
 }
 
 /**
