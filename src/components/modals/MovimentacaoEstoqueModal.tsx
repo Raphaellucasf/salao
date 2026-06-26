@@ -58,18 +58,34 @@ export default function MovimentacaoModal({ isOpen, onClose, produto, onSave }: 
         throw new Error('Quantidade maior que o estoque disponível');
       }
 
-      // Chamar função do banco para registrar movimentação
-      const { error: funcError } = await supabase.rpc('registrar_movimentacao_estoque', {
-        p_produto_id: produto.id,
-        p_tipo: formData.tipo,
-        p_quantidade: formData.quantidade,
-        p_valor_unitario: formData.valor_unitario,
-        p_motivo: formData.motivo.trim() || null,
-        p_documento: formData.documento.trim() || null,
-        p_usuario_id: null, // TODO: pegar do contexto de auth
-      });
+      // Calcular quantidade após movimentação
+      const novaQuantidade = isEntrada
+        ? quantidadeAtual + formData.quantidade
+        : quantidadeAtual - formData.quantidade;
 
-      if (funcError) throw funcError;
+      // 1. Inserir movimentação diretamente na tabela
+      const { error: movError } = await supabase
+        .from('estoque_movimentacoes')
+        .insert({
+          produto_id: produto.id,
+          tipo: formData.tipo,
+          quantidade: isEntrada ? formData.quantidade : -formData.quantidade,
+          quantidade_anterior: quantidadeAtual,
+          quantidade_atual: novaQuantidade,
+          valor_unitario: formData.valor_unitario,
+          valor_total: formData.valor_unitario * formData.quantidade,
+          motivo: [formData.motivo.trim(), formData.documento.trim()].filter(Boolean).join(' | ') || null,
+        });
+
+      if (movError) throw movError;
+
+      // 2. Atualizar quantidade do produto
+      const { error: prodError } = await supabase
+        .from('produtos')
+        .update({ quantidade: novaQuantidade })
+        .eq('id', produto.id);
+
+      if (prodError) throw prodError;
 
       onSave();
       onClose();

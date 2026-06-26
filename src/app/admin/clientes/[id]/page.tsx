@@ -422,7 +422,7 @@ export default function ClientePerfilPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <User className="w-4 h-4" />
-                  Cliente desde {formatDate(cliente.created_at.split('T')[0])}
+                  Cliente desde {formatDate((cliente.created_at ?? '').split('T')[0] || '—')}
                 </span>
               </div>
             </div>

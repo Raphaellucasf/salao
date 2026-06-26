@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { verificarPacoteAtivo, debitarSessaoPacote, type PacoteAtivo } from '@/services/pacotes';
-import { X, User, Scissors, Clock, Search, Calendar, ChevronDown, Gift } from 'lucide-react';
+import { X, User, Scissors, Clock, Search, Calendar, ChevronDown, Gift, ShoppingBag } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -18,6 +18,8 @@ interface Props {
 
 interface Cliente { id: string; nome: string; telefone?: string; }
 interface Servico { id: string; nome: string; duracao_minutos: number; preco?: number; pacoteClienteId?: string; }
+interface Produto { id: string; nome: string; preco?: number; quantidade?: number; }
+interface ItemProduto { id: string; nome: string; preco: number; quantidade: number; }
 
 export default function NovoAgendamentoModal({
   isOpen, onClose, onSuccess,
@@ -37,6 +39,11 @@ export default function NovoAgendamentoModal({
   const [observacoes, setObservacoes] = useState('');
   const [saving, setSaving] = useState(false);
   const [pacotesAtivos, setPacotesAtivos] = useState<PacoteAtivo[]>([]);
+  // Produtos
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [itensProduto, setItensProduto] = useState<ItemProduto[]>([]);
+  const [produtoOpen, setProdutoOpen] = useState(false);
+  const [searchP, setSearchP] = useState('');
   const clienteRef = useRef<HTMLInputElement>(null);
   const debounce = useRef<NodeJS.Timeout>();
 
@@ -47,8 +54,11 @@ export default function NovoAgendamentoModal({
     setSearchCliente(''); setClienteSel(null); setServicosSel([]);
     setObservacoes(''); setClienteDropdown(false); setServicosOpen(false);
     setPacotesAtivos([]);
+    setItensProduto([]); setProdutoOpen(false); setSearchP('');
     supabase.from('servicos').select('id,nome,duracao_minutos,preco').eq('ativo', true).order('nome')
       .then(({ data }) => { if (data) setServicos(data); });
+    supabase.from('produtos').select('id,nome,preco').in('tipo', ['venda', 'revenda']).eq('ativo', true).order('nome')
+      .then(({ data }) => { if (data) setProdutos(data || []); });
     setTimeout(() => clienteRef.current?.focus(), 120);
   }, [isOpen, professionalId, time]);
 
@@ -129,19 +139,30 @@ export default function NovoAgendamentoModal({
         .single();
       if (cmdError) throw cmdError;
 
-      // 3. Criar os itens da comanda (um por serviço selecionado)
-      if (servicosSel.length > 0 && novaComanda) {
-        const itens = servicosSel.map(s => ({
-          comanda_id: novaComanda.id,
-          tipo: 'servico' as const,
-          item_id: String(s.id),
-          descricao: s.pacoteClienteId ? s.nome + ' (Sessão de Pacote)' : s.nome,
-          quantidade: 1,
-          valor_unitario: s.preco ?? 0,
-          valor_total: s.preco ?? 0,
-          profissional_id: profId,
-        }));
-        const { error: itensError } = await supabase.from('comanda_itens').insert(itens);
+      // 3. Criar os itens da comanda (serviços + produtos)
+      const itensServico = servicosSel.map(s => ({
+        comanda_id: novaComanda.id,
+        tipo: 'servico' as const,
+        item_id: String(s.id),
+        descricao: s.pacoteClienteId ? s.nome + ' (Sessão de Pacote)' : s.nome,
+        quantidade: 1,
+        valor_unitario: s.preco ?? 0,
+        valor_total: s.preco ?? 0,
+        profissional_id: profId,
+      }));
+      const itensProd = itensProduto.map(p => ({
+        comanda_id: novaComanda.id,
+        tipo: 'produto' as const,
+        item_id: String(p.id),
+        descricao: p.nome,
+        quantidade: p.quantidade,
+        valor_unitario: p.preco,
+        valor_total: p.preco * p.quantidade,
+        profissional_id: profId,
+      }));
+      const todosItens = [...itensServico, ...itensProd];
+      if (todosItens.length > 0 && novaComanda) {
+        const { error: itensError } = await supabase.from('comanda_itens').insert(todosItens);
         if (itensError) console.warn('Aviso: erro ao criar itens da comanda:', itensError.message);
       }
 
@@ -166,6 +187,7 @@ export default function NovoAgendamentoModal({
   const profSel = professionals.find(p => p.id === profId);
   const cor = profSel?.color || professionalColor || '#6366F1';
   const servicosFiltrados = servicos.filter(s => s.nome.toLowerCase().includes(searchS.toLowerCase()));
+  const produtosFiltrados = produtos.filter(p => p.nome.toLowerCase().includes(searchP.toLowerCase()));
   const dataFormatada = (() => {
     try { return new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }); }
     catch { return date; }
@@ -297,6 +319,62 @@ export default function NovoAgendamentoModal({
                       </button>
                     );
                   })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Produtos */}
+          <div>
+            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+              <ShoppingBag className="inline w-3.5 h-3.5 mr-1" />Produtos
+              {itensProduto.length > 0 && (
+                <span className="ml-2 bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">
+                  {itensProduto.length} item(ns)
+                </span>
+              )}
+            </label>
+            {itensProduto.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {itensProduto.map(p => (
+                  <span key={p.id}
+                    onClick={() => setItensProduto(prev => prev.filter(x => x.id !== p.id))}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full cursor-pointer bg-green-50 border border-green-200 text-green-800 hover:bg-green-100">
+                    {p.nome} ×{p.quantidade} <X className="w-3 h-3" />
+                  </span>
+                ))}
+              </div>
+            )}
+            <button type="button" onClick={() => setProdutoOpen(!produtoOpen)}
+              className="w-full flex items-center justify-between px-4 py-2.5 border border-neutral-200 rounded-xl text-sm hover:border-neutral-300 transition-colors">
+              <span className="text-neutral-500">{itensProduto.length === 0 ? 'Adicionar produto (opcional)...' : 'Adicionar mais...'}</span>
+              <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${produtoOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {produtoOpen && (
+              <div className="mt-1 border border-neutral-200 rounded-xl overflow-hidden shadow-md">
+                <div className="p-2 border-b border-neutral-100">
+                  <input type="text" value={searchP} onChange={e => setSearchP(e.target.value)}
+                    placeholder="Filtrar produtos..." className="w-full px-3 py-1.5 text-sm border border-neutral-200 rounded-lg focus:outline-none" />
+                </div>
+                <div className="max-h-36 overflow-y-auto">
+                  {produtosFiltrados.map(p => (
+                    <button key={p.id} type="button"
+                      onClick={() => {
+                        setItensProduto(prev => {
+                          const exists = prev.find(x => x.id === p.id);
+                          if (exists) return prev.map(x => x.id === p.id ? { ...x, quantidade: x.quantidade + 1 } : x);
+                          return [...prev, { id: p.id, nome: p.nome, preco: p.preco ?? 0, quantidade: 1 }];
+                        });
+                        setProdutoOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-neutral-50 border-b border-neutral-50 last:border-0 transition-colors">
+                      <span className="text-sm font-medium">{p.nome}</span>
+                      <span className="text-xs text-neutral-400">R$ {Number(p.preco ?? 0).toFixed(2)}</span>
+                    </button>
+                  ))}
+                  {produtosFiltrados.length === 0 && (
+                    <div className="px-4 py-3 text-sm text-neutral-400">Nenhum produto encontrado</div>
+                  )}
                 </div>
               </div>
             )}
