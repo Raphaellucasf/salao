@@ -130,7 +130,7 @@ export default function VendaPacoteClienteModal({ isOpen, onClose }: VendaPacote
       if (fechamento) {
         await supabase.from('transacoes').insert({
           tipo: 'receita',
-          valor: pacoteSelecionado.preco,
+          valor: pacoteSelecionado.preco_total,
           descricao: `Venda Pacote: ${pacoteSelecionado.nome} (Cliente: ${cliente.nome})`,
           metodo_pagamento: metodoPagamento,
           data_transacao: new Date().toISOString(),
@@ -249,7 +249,7 @@ export default function VendaPacoteClienteModal({ isOpen, onClose }: VendaPacote
                 >
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-bold text-neutral-900">{pacote.nome}</h4>
-                    <span className="font-semibold text-purple-700">R$ {Number(pacote.preco).toFixed(2)}</span>
+                    <span className="font-semibold text-purple-700">R$ {Number(pacote.preco_total).toFixed(2)}</span>
                   </div>
                   <div className="text-xs text-neutral-600 space-y-1">
                     {pacote.pacotes_servicos_itens?.map((item: any, i: number) => (
@@ -303,7 +303,7 @@ export default function VendaPacoteClienteModal({ isOpen, onClose }: VendaPacote
                 </div>
                 <div className="text-right">
                   <span className="text-sm text-neutral-500">Total a Pagar</span>
-                  <p className="text-3xl font-bold text-purple-700">R$ {Number(pacoteSelecionado?.preco).toFixed(2)}</p>
+                  <p className="text-3xl font-bold text-purple-700">R$ {Number(pacoteSelecionado?.preco_total).toFixed(2)}</p>
                 </div>
               </div>
             </div>

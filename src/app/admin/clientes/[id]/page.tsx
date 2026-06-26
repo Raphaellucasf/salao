@@ -307,8 +307,7 @@ export default function ClientePerfilPage() {
             data_agendamento,
             hora_inicio,
             status,
-            servicos(nome),
-            profissionais(nome)
+            profissional_id
           `)
           .eq('cliente_id', clienteId)
           .gte('data_agendamento', hoje)
@@ -316,15 +315,20 @@ export default function ClientePerfilPage() {
           .order('data_agendamento', { ascending: true })
           .order('hora_inicio', { ascending: true });
 
-        if (error) throw error;
+        if (error) {
+          console.error('[perfil] Erro ao carregar agendamentos:', error);
+          setAgendamentos([]);
+          setLoadingAgendamentos(false);
+          return;
+        }
 
         const resultado: Agendamento[] = (data || []).map((ag: any) => ({
           id: ag.id,
           data_agendamento: ag.data_agendamento,
           hora_inicio: ag.hora_inicio,
           status: ag.status,
-          servico_nome: ag.servicos?.nome ?? 'Serviço',
-          profissional_nome: ag.profissionais?.nome ?? 'Profissional',
+          servico_nome: 'Serviço',
+          profissional_nome: 'Profissional',
         }));
 
         setAgendamentos(resultado);

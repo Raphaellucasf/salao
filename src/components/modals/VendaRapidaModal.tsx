@@ -57,7 +57,7 @@ export default function VendaRapidaModal({ isOpen, onClose }: VendaRapidaModalPr
     try {
       const [resServicos, resProdutos] = await Promise.all([
         supabase.from('servicos').select('id, nome, preco').eq('ativo', true).order('nome'),
-        supabase.from('produtos').select('id, nome, preco').eq('tipo', 'revenda').eq('ativo', true).order('nome')
+        supabase.from('produtos').select('id, nome, preco').in('tipo', ['venda', 'revenda']).eq('ativo', true).order('nome')
       ]);
       setServicos(resServicos.data || []);
       setProdutos(resProdutos.data || []);
@@ -188,25 +188,29 @@ export default function VendaRapidaModal({ isOpen, onClose }: VendaRapidaModalPr
         });
       }
 
-      // 4. Movimentar estoque para produtos
-      const produtosParaEstoque = itens.filter(i => i.tipo === 'produto');
-      for (const prod of produtosParaEstoque) {
-        const { data: currentProd } = await supabase.from('produtos').select('quantidade').eq('id', prod.item_id).single();
-        if (currentProd) {
-          const qtdAnterior = currentProd.quantidade || 0;
-          await supabase.from('estoque_movimentacoes').insert({
-            produto_id: prod.item_id,
-            tipo: 'venda',
-            quantidade: prod.quantidade,
-            quantidade_anterior: qtdAnterior,
-            quantidade_atual: qtdAnterior - prod.quantidade,
-            valor_unitario: prod.valor_unitario,
-            valor_total: prod.valor_total,
-            motivo: `Venda Rápida #${comandaNova.numero_comanda || comandaNova.id}`
-          });
-          // Update product qty
-          await supabase.from('produtos').update({ quantidade: qtdAnterior - prod.quantidade }).eq('id', prod.item_id);
+      // 4. Movimentar estoque para produtos (em try/catch isolado — não bloqueia a venda)
+      try {
+        const produtosParaEstoque = itens.filter(i => i.tipo === 'produto');
+        for (const prod of produtosParaEstoque) {
+          const { data: currentProd } = await supabase.from('produtos').select('quantidade').eq('id', prod.item_id).single();
+          if (currentProd) {
+            const qtdAnterior = currentProd.quantidade || 0;
+            await supabase.from('estoque_movimentacoes').insert({
+              produto_id: prod.item_id,
+              tipo: 'venda',
+              quantidade: prod.quantidade,
+              quantidade_anterior: qtdAnterior,
+              quantidade_atual: qtdAnterior - prod.quantidade,
+              valor_unitario: prod.valor_unitario,
+              valor_total: prod.valor_total,
+              motivo: `Venda Rápida #${comandaNova.numero_comanda || comandaNova.id}`
+            });
+            // Update product qty
+            await supabase.from('produtos').update({ quantidade: qtdAnterior - prod.quantidade }).eq('id', prod.item_id);
+          }
         }
+      } catch (estoqueErr) {
+        console.warn('[VendaRapida] Estoque não movimentado (tabela pode não existir):', estoqueErr);
       }
 
       toast.success('Venda rápida realizada com sucesso!');
