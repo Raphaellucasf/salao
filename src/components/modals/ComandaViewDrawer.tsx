@@ -545,7 +545,14 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
         .update({ status: 'cancelada' })
         .eq('id', comanda.id);
       if (error) throw error;
-      toast.success(`Comanda #${comanda.numero_comanda} cancelada.`);
+
+      // Excluir o agendamento associado (se houver) para refletir no calendário
+      await (supabase as any)
+        .from('agendamentos')
+        .delete()
+        .eq('comanda_id', comanda.id);
+
+      toast.success(`Comanda #${comanda.numero_comanda} cancelada e agendamento excluído.`);
       // Notifica o pai sobre exclusão/cancelamento ANTES de fechar o drawer
       onDelete?.();
       onClose();
