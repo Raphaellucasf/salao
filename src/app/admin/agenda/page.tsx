@@ -799,6 +799,7 @@ export default function AgendaPage() {
           setSelectedComandaId(undefined);
           loadAppointments();
         }}
+        onDelete={() => loadAppointments()}
         comandaId={selectedComandaId}
       />
 

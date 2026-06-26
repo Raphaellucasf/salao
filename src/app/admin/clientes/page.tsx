@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User, TrendingUp, DollarSign } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User, TrendingUp, DollarSign, Eye } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -10,6 +11,7 @@ import ClienteModal from '@/components/modals/ClienteModal';
 import { supabase } from '@/lib/supabase';
 
 export default function ClientesPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'todos' | 'ativos' | 'inativos'>('todos');
   const [clientes, setClientes] = useState<any[]>([]);
@@ -222,15 +224,24 @@ export default function ClientesPage() {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => router.push(`/admin/clientes/${cliente.id}`)}
+                          className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Ver Perfil"
+                        >
+                          <Eye className="w-4 h-4 text-blue-600" />
+                        </button>
                         <button 
                           onClick={() => handleEdit(cliente)}
                           className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                          title="Editar"
                         >
                           <Edit className="w-4 h-4 text-neutral-600" />
                         </button>
                         <button 
                           onClick={() => handleDelete(cliente.id)}
                           className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Excluir"
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </button>

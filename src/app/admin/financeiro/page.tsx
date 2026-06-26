@@ -234,7 +234,11 @@ function FinanceiroPage() {
     try {
       const r = await fetch(`/api/admin/abertura-caixa?data=${data}`);
       const d = await r.json();
-      setAberturaCaixa(d ? Number(d.valor_abertura) : null);
+      if (r.ok && d && d.valor_abertura !== undefined && d.valor_abertura !== null) {
+        setAberturaCaixa(Number(d.valor_abertura));
+      } else {
+        setAberturaCaixa(null);
+      }
     } catch { setAberturaCaixa(null); }
   }, []);
 
@@ -269,9 +273,17 @@ function FinanceiroPage() {
     try {
       const r = await fetch('/api/admin/fundo-caixa');
       const d = await r.json();
-      setSaldoFundo(Number(d.saldo ?? 0));
-      setMovsF(d.movimentacoes ?? []);
-    } catch { /* silencioso */ }
+      if (r.ok && d) {
+        setSaldoFundo(Number(d.saldo ?? 0));
+        setMovsF(d.movimentacoes ?? []);
+      } else {
+        setSaldoFundo(0);
+        setMovsF([]);
+      }
+    } catch {
+      setSaldoFundo(0);
+      setMovsF([]);
+    }
   }, []);
 
   useEffect(() => { carregarFundo(); }, [carregarFundo]);
@@ -309,8 +321,17 @@ function FinanceiroPage() {
     setLoadingContas(true);
     try {
       const r = await fetch('/api/admin/contas-fixas');
-      setContasFixas(await r.json());
-    } catch { /* silencioso */ } finally {
+      const data = await r.json();
+      if (r.ok && Array.isArray(data)) {
+        setContasFixas(data);
+      } else {
+        console.error('Erro ao carregar contas fixas:', data?.error || 'Resposta inválida');
+        setContasFixas([]);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar contas fixas:', e);
+      setContasFixas([]);
+    } finally {
       setLoadingContas(false);
     }
   }, []);

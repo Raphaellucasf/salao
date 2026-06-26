@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, ShoppingBag, DollarSign, Receipt, Plus, X, Package as PackageIcon, MessageSquare, Search, FileStack } from 'lucide-react';
+import { Calendar, ShoppingBag, DollarSign, Receipt, Plus, X, Package as PackageIcon, MessageSquare, Search, FileStack, FlaskConical } from 'lucide-react';
+import ConsumoInternoModal from '@/components/modals/ConsumoInternoModal';
+import VendaRapidaModal from '@/components/modals/VendaRapidaModal';
+import VendaPacoteClienteModal from '@/components/modals/VendaPacoteClienteModal';
 import { useRouter } from 'next/navigation';
 
 interface QuickAction {
@@ -15,6 +18,9 @@ interface QuickAction {
 
 export default function QuickActions() {
   const [isOpen, setIsOpen] = useState(false);
+  const [consumoInternoOpen, setConsumoInternoOpen] = useState(false);
+  const [vendaRapidaOpen, setVendaRapidaOpen] = useState(false);
+  const [vendaPacoteOpen, setVendaPacoteOpen] = useState(false);
   const router = useRouter();
 
   const actions: QuickAction[] = [
@@ -48,7 +54,7 @@ export default function QuickActions() {
       icon: PackageIcon,
       color: 'from-purple-500 to-purple-600',
       shortcut: 'F4',
-      onClick: () => router.push('/admin/pacotes'),
+      onClick: () => setVendaPacoteOpen(true),
     },
     {
       id: 'send-message',
@@ -70,7 +76,14 @@ export default function QuickActions() {
       name: 'Venda Rápida',
       icon: ShoppingBag,
       color: 'from-teal-500 to-teal-600',
-      onClick: () => router.push('/admin/estoque'),
+      onClick: () => setVendaRapidaOpen(true),
+    },
+    {
+      id: 'consumo-interno',
+      name: 'Consumo Interno',
+      icon: FlaskConical,
+      color: 'from-orange-500 to-orange-600',
+      onClick: () => setConsumoInternoOpen(true),
     },
   ];
 
@@ -147,6 +160,18 @@ export default function QuickActions() {
           </div>
         </>
       )}
+      <ConsumoInternoModal
+        isOpen={consumoInternoOpen}
+        onClose={() => setConsumoInternoOpen(false)}
+      />
+      <VendaRapidaModal
+        isOpen={vendaRapidaOpen}
+        onClose={() => setVendaRapidaOpen(false)}
+      />
+      <VendaPacoteClienteModal
+        isOpen={vendaPacoteOpen}
+        onClose={() => setVendaPacoteOpen(false)}
+      />
     </>
   );
 }

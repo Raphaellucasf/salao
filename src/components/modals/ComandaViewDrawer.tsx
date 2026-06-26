@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, User, Phone, Calendar, Clock, Scissors, ShoppingBag, Package, MapPin, DollarSign, Lock, Percent } from 'lucide-react';
+import { X, User, Phone, Calendar, Clock, Scissors, ShoppingBag, Package, MapPin, DollarSign, Lock, Percent, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DEFAULT_UNIT_ID } from '@/services/caixa';
-import { registrarCompraPacote, debitarSessaoPorServico } from '@/services/pacotes';
+import { registrarCompraPacote, debitarSessaoPorServico, verificarPacoteAtivo, debitarSessaoPacote } from '@/services/pacotes';
+import type { PacoteAtivo } from '@/services/pacotes';
 import { toast } from 'sonner';
 
 interface ComandaViewDrawerProps {
@@ -15,6 +16,8 @@ interface ComandaViewDrawerProps {
   onClose: () => void;
   comandaId?: number;
   onEdit?: () => void;
+  /** Chamado especificamente ao excluir/cancelar uma comanda, antes de onClose */
+  onDelete?: () => void;
 }
 
 interface ComissaoEntry {
@@ -24,17 +27,31 @@ interface ComissaoEntry {
   valor: number;
 }
 
-export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }: ComandaViewDrawerProps) {
+export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, onDelete }: ComandaViewDrawerProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [comanda, setComanda] = useState<any>(null);
   const [metodoPagamento, setMetodoPagamento] = useState('dinheiro');
   const [fechandoComanda, setFechandoComanda] = useState(false);
 
+  // R6: estados para adição dinâmica de itens
+  const [addItemMenuOpen, setAddItemMenuOpen] = useState(false);
+  const [addItemType, setAddItemType] = useState<'servico' | 'produto' | 'pacote' | null>(null);
+  const [servicosDisponiveis, setServicosDisponiveis] = useState<any[]>([]);
+  const [produtosDisponiveis, setProdutosDisponiveis] = useState<any[]>([]);
+  const [pacotesAtivosDisponiveis, setPacotesAtivosDisponiveis] = useState<PacoteAtivo[]>([]);
+  const [addingItem, setAddingItem] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState('');
+  const [itemQtd, setItemQtd] = useState(1);
+
   // T-07: comissões e desconto auditado
   const [comissoes, setComissoes] = useState<ComissaoEntry[]>([]);
   const [desconto, setDesconto] = useState<number>(0);
   const [caixaFechado, setCaixaFechado] = useState(false);
+
+  const subtotalComanda = comanda?.comanda_itens && comanda.comanda_itens.length > 0
+    ? comanda.comanda_itens.reduce((sum: number, item: { valor_total?: string | number }) => sum + Number(item.valor_total || 0), 0)
+    : Number(comanda?.subtotal || comanda?.total || 0);
 
   useEffect(() => {
     if (isOpen && comandaId) {
@@ -43,6 +60,11 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
     } else {
       console.log('🔴 Drawer sem comandaId:', { isOpen, comandaId });
       setComanda(null);
+      // Reset R6 states
+      setAddItemMenuOpen(false);
+      setAddItemType(null);
+      setSelectedItemId('');
+      setItemQtd(1);
     }
   }, [isOpen, comandaId]);
 
@@ -228,6 +250,150 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
     }
   };
 
+  // R6: funções de carga de dados para adição dinâmica
+  const loadServicos = async () => {
+    try {
+      const { data } = await supabase
+        .from('servicos')
+        .select('id, nome, preco')
+        .eq('ativo', true)
+        .order('nome');
+      setServicosDisponiveis(data || []);
+    } catch (err) {
+      console.error('[R6] Erro ao carregar serviços:', err);
+    }
+  };
+
+  const loadProdutosVenda = async () => {
+    try {
+      const { data } = await (supabase as any)
+        .from('produtos')
+        .select('id, nome, preco')
+        .eq('tipo', 'revenda')
+        .eq('ativo', true)
+        .order('nome');
+      setProdutosDisponiveis(data || []);
+    } catch (err) {
+      console.error('[R6] Erro ao carregar produtos:', err);
+    }
+  };
+
+  const loadPacotesAtivos = async (clienteId: number) => {
+    try {
+      const ativos = await verificarPacoteAtivo(clienteId);
+      setPacotesAtivosDisponiveis(ativos);
+    } catch (err) {
+      console.error('[R6] Erro ao carregar pacotes ativos:', err);
+    }
+  };
+
+  const abrirAddItem = async (tipo: 'servico' | 'produto' | 'pacote') => {
+    setAddItemType(tipo);
+    setSelectedItemId('');
+    setItemQtd(1);
+    // Carrega dados sob demanda
+    if (tipo === 'servico' && servicosDisponiveis.length === 0) await loadServicos();
+    if (tipo === 'produto' && produtosDisponiveis.length === 0) await loadProdutosVenda();
+    if (tipo === 'pacote' && pacotesAtivosDisponiveis.length === 0 && comanda?.cliente_id) {
+      await loadPacotesAtivos(comanda.cliente_id);
+    }
+  };
+
+  const adicionarItem = async () => {
+    if (!selectedItemId || !comanda) return;
+    setAddingItem(true);
+    try {
+      let novoItemPayload: Record<string, any> | null = null;
+
+      if (addItemType === 'servico') {
+        const svc = servicosDisponiveis.find((s) => s.id === selectedItemId);
+        if (!svc) throw new Error('Serviço não encontrado');
+        novoItemPayload = {
+          comanda_id: comanda.id,
+          tipo: 'servico',
+          item_id: svc.id,
+          descricao: svc.nome,
+          quantidade: itemQtd,
+          valor_unitario: Number(svc.preco) || 0,
+          valor_total: (Number(svc.preco) || 0) * itemQtd,
+        };
+      } else if (addItemType === 'produto') {
+        const prod = produtosDisponiveis.find((p) => p.id === selectedItemId);
+        if (!prod) throw new Error('Produto não encontrado');
+        novoItemPayload = {
+          comanda_id: comanda.id,
+          tipo: 'produto',
+          item_id: prod.id,
+          descricao: prod.nome,
+          quantidade: itemQtd,
+          valor_unitario: Number(prod.preco) || 0,
+          valor_total: (Number(prod.preco) || 0) * itemQtd,
+        };
+      } else if (addItemType === 'pacote') {
+        const pac = pacotesAtivosDisponiveis.find((p) => p.id === selectedItemId);
+        if (!pac) throw new Error('Pacote não encontrado');
+        // Debitar 1 sessão do pacote do cliente
+        const debitou = await debitarSessaoPacote(pac.id);
+        if (!debitou) {
+          toast.error('Não foi possível debitar sessão: saldo esgotado ou pacote inválido.');
+          setAddingItem(false);
+          return;
+        }
+        novoItemPayload = {
+          comanda_id: comanda.id,
+          tipo: 'pacote',
+          item_id: pac.id,
+          descricao: pac.servico_nome + ' (Sessão de Pacote)',
+          quantidade: itemQtd,
+          valor_unitario: 0,
+          valor_total: 0,
+        };
+      }
+
+      if (!novoItemPayload) return;
+
+      // Inserir item na comanda
+      const { error: insertErr } = await (supabase as any)
+        .from('comanda_itens')
+        .insert([novoItemPayload]);
+      if (insertErr) throw insertErr;
+
+      // Recalcular subtotal buscando todos os itens atualizados
+      const { data: itensAtualizados } = await (supabase as any)
+        .from('comanda_itens')
+        .select('valor_total')
+        .eq('comanda_id', comanda.id);
+
+      const novoSubtotal = (itensAtualizados || []).reduce(
+        (sum: number, item: { valor_total?: string | number }) => sum + Number(item.valor_total || 0),
+        0,
+      );
+
+      // Atualizar subtotal e total na comanda
+      await (supabase as any)
+        .from('comandas')
+        .update({ subtotal: novoSubtotal, total: Math.max(0, novoSubtotal - (Number(comanda.desconto) || 0)) })
+        .eq('id', comanda.id);
+
+      toast.success('Item adicionado com sucesso!');
+      // Fechar painel e recarregar
+      setAddItemMenuOpen(false);
+      setAddItemType(null);
+      setSelectedItemId('');
+      setItemQtd(1);
+      // Forçar recarga de pacotes ativos se tipo pacote (saldo mudou)
+      if (addItemType === 'pacote' && comanda?.cliente_id) {
+        setPacotesAtivosDisponiveis([]);
+      }
+      await loadComanda();
+    } catch (err: any) {
+      console.error('[R6] Erro ao adicionar item:', err);
+      toast.error(`Erro ao adicionar item: ${err?.message || 'Tente novamente'}`);
+    } finally {
+      setAddingItem(false);
+    }
+  };
+
   const fecharComanda = async () => {
     console.log('[fecharComanda] INÍCIO — status:', comanda?.status, 'id:', comanda?.id);
     if (!comanda || comanda.status !== 'aberta') {
@@ -238,16 +404,26 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
       setFechandoComanda(true);
 
       const descontoNum = Math.max(0, Number(desconto) || 0);
+      const subtotalFinal = (comanda.comanda_itens || []).reduce(
+        (sum: number, item: { valor_total?: string | number }) => sum + Number(item.valor_total || 0), 0,
+      );
+      const totalFinal = Math.max(0, subtotalFinal - descontoNum);
+
       const updatePayload: Record<string, any> = {
         status: 'fechada',
         data_fechamento: new Date().toISOString(),
         fechado_por: user?.id ?? null,
+        subtotal: subtotalFinal,
+        desconto: descontoNum,
+        total: totalFinal,
       };
+
       if (descontoNum > 0) {
-        updatePayload.desconto = descontoNum;
         updatePayload.desconto_aplicado_por = user?.id ?? null;
         updatePayload.desconto_aplicado_em = new Date().toISOString();
-        updatePayload.total = Math.max(0, (Number(comanda.subtotal) || 0) - descontoNum);
+      } else {
+        updatePayload.desconto_aplicado_por = null;
+        updatePayload.desconto_aplicado_em = null;
       }
 
       console.log('[fecharComanda] Chamando supabase.update …');
@@ -261,13 +437,6 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
         console.error('[fecharComanda] cmdError LANÇADO:', cmdError);
         throw cmdError;
       }
-
-      // Calcular total final
-      const itemsTotal = (comanda.comanda_itens || []).reduce(
-        (sum: number, item: any) => sum + Number(item.valor_total || 0), 0,
-      );
-      const baseTotal = Number(comanda.subtotal || comanda.total || itemsTotal) || 0;
-      const totalFinal = descontoNum > 0 ? Math.max(0, baseTotal - descontoNum) : baseTotal;
 
       // PASSO CRÍTICO: registrar transação financeira IMEDIATAMENTE após fechar comanda
       console.log('[fecharComanda] totalFinal calculado:', totalFinal, '— chamando fetch …');
@@ -376,9 +545,12 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
         .update({ status: 'cancelada' })
         .eq('id', comanda.id);
       if (error) throw error;
+      toast.success(`Comanda #${comanda.numero_comanda} cancelada.`);
+      // Notifica o pai sobre exclusão/cancelamento ANTES de fechar o drawer
+      onDelete?.();
       onClose();
     } catch (err: any) {
-      alert(`Erro ao cancelar: ${err.message}`);
+      toast.error(`Erro ao cancelar: ${err.message}`);
     }
   };
 
@@ -514,9 +686,176 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
 
               {/* Itens da Comanda */}
               <div>
-                <h3 className="font-semibold text-neutral-900 mb-3">
-                  Itens ({comanda.comanda_itens?.length || 0})
-                </h3>
+                {/* R6: Header de Itens com botão adicionar */}
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold text-neutral-900">
+                    Itens ({comanda.comanda_itens?.length || 0})
+                  </h3>
+                  {comanda.status === 'aberta' && !addItemMenuOpen && (
+                    <button
+                      onClick={() => setAddItemMenuOpen(true)}
+                      className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow transition-colors"
+                      title="Adicionar item"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* R6: Painel inline de adição de item */}
+                {comanda.status === 'aberta' && addItemMenuOpen && (
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                    <p className="text-sm font-semibold text-blue-800">Adicionar item à comanda</p>
+
+                    {/* Seleção de tipo */}
+                    {!addItemType && (
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={() => abrirAddItem('servico')}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                        >
+                          <Scissors className="w-4 h-4" /> + Serviço
+                        </button>
+                        <button
+                          onClick={() => abrirAddItem('produto')}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
+                        >
+                          <ShoppingBag className="w-4 h-4" /> + Produto
+                        </button>
+                        <button
+                          onClick={() => abrirAddItem('pacote')}
+                          disabled={!comanda.cliente_id}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
+                          title={!comanda.cliente_id ? 'Comanda sem cliente vinculado' : ''}
+                        >
+                          <Package className="w-4 h-4" /> + Pacote
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Form de seleção após escolher tipo */}
+                    {addItemType && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          {addItemType === 'servico' && <Scissors className="w-4 h-4 text-blue-600" />}
+                          {addItemType === 'produto' && <ShoppingBag className="w-4 h-4 text-green-600" />}
+                          {addItemType === 'pacote' && <Package className="w-4 h-4 text-purple-600" />}
+                          <span className="text-sm font-medium text-neutral-700 capitalize">
+                            {addItemType === 'servico' ? 'Serviço' : addItemType === 'produto' ? 'Produto' : 'Pacote (crédito)'}
+                          </span>
+                          <button
+                            onClick={() => setAddItemType(null)}
+                            className="ml-auto text-xs text-neutral-500 hover:text-neutral-700 underline"
+                          >
+                            trocar tipo
+                          </button>
+                        </div>
+
+                        {/* Select do item */}
+                        {addItemType === 'servico' && (
+                          <select
+                            value={selectedItemId}
+                            onChange={(e) => setSelectedItemId(e.target.value)}
+                            className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Selecione um serviço...</option>
+                            {servicosDisponiveis.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.nome} — R$ {Number(s.preco || 0).toFixed(2)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {addItemType === 'produto' && (
+                          <select
+                            value={selectedItemId}
+                            onChange={(e) => setSelectedItemId(e.target.value)}
+                            className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          >
+                            <option value="">Selecione um produto...</option>
+                            {produtosDisponiveis.length === 0 && (
+                              <option disabled>Nenhum produto para revenda disponível</option>
+                            )}
+                            {produtosDisponiveis.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.nome} — R$ {Number(p.preco || 0).toFixed(2)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {addItemType === 'pacote' && (
+                          <select
+                            value={selectedItemId}
+                            onChange={(e) => setSelectedItemId(e.target.value)}
+                            className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          >
+                            <option value="">Selecione um pacote ativo...</option>
+                            {pacotesAtivosDisponiveis.length === 0 && (
+                              <option disabled>Nenhum pacote ativo com saldo para este cliente</option>
+                            )}
+                            {pacotesAtivosDisponiveis.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.servico_nome} ({p.sessoes_restantes}/{p.sessoes_total} sessões)
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* Quantidade */}
+                        <div className="flex items-center gap-3">
+                          <label className="text-sm text-neutral-600 shrink-0">Qtd:</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={addItemType === 'pacote' ? 1 : 99}
+                            value={itemQtd}
+                            onChange={(e) => setItemQtd(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-20 border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          {addItemType === 'pacote' && (
+                            <span className="text-xs text-neutral-500">(1 sessão por uso de pacote)</span>
+                          )}
+                        </div>
+
+                        {/* Botões de ação */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={adicionarItem}
+                            disabled={!selectedItemId || addingItem}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            {addingItem ? (
+                              <>
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                Adicionando...
+                              </>
+                            ) : (
+                              <><Plus className="w-4 h-4" /> Adicionar</>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setAddItemMenuOpen(false);
+                              setAddItemType(null);
+                              setSelectedItemId('');
+                              setItemQtd(1);
+                            }}
+                            disabled={addingItem}
+                            className="px-4 py-2 text-sm text-neutral-600 hover:text-neutral-800 border border-neutral-300 rounded-lg transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   {comanda.comanda_itens?.map((item: any, index: number) => (
                     <div 
@@ -597,19 +936,23 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm text-neutral-600">Subtotal</span>
                   <span className="font-medium text-neutral-700">
-                    R$ {Number(comanda.subtotal || comanda.total || 0).toFixed(2)}
+                    R$ {subtotalComanda.toFixed(2)}
                   </span>
                 </div>
-                {Number(comanda.desconto) > 0 && comanda.status === 'fechada' && (
+                {((comanda.status === 'fechada' && Number(comanda.desconto) > 0) || (comanda.status === 'aberta' && desconto > 0)) && (
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-neutral-600">Desconto</span>
-                    <span className="font-medium text-red-600">- R$ {Number(comanda.desconto).toFixed(2)}</span>
+                    <span className="font-medium text-red-600">
+                      - R$ {(comanda.status === 'fechada' ? Number(comanda.desconto) : desconto).toFixed(2)}
+                    </span>
                   </div>
                 )}
                 <div className="flex items-center justify-between pt-2 border-t border-green-200 mt-2">
                   <span className="text-lg font-semibold text-neutral-900">Total</span>
                   <span className="text-3xl font-bold text-green-600">
-                    R$ {comanda.total?.toFixed(2) || '0.00'}
+                    R$ {comanda.status === 'aberta'
+                      ? Math.max(0, subtotalComanda - desconto).toFixed(2)
+                      : (comanda.total?.toFixed(2) || '0.00')}
                   </span>
                 </div>
               </div>
@@ -639,7 +982,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit }
                       <p className="text-xs text-neutral-500">
                         Total com desconto:{' '}
                         <span className="font-semibold text-green-700">
-                          R$ {Math.max(0, (Number(comanda.subtotal || comanda.total) || 0) - desconto).toFixed(2)}
+                          R$ {Math.max(0, subtotalComanda - desconto).toFixed(2)}
                         </span>
                       </p>
                     )}
