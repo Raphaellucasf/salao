@@ -13,7 +13,14 @@ interface ModalProps {
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
+
+  // O callback costuma ser recriado pelos modais conforme o formulário muda.
+  // Mantê-lo em uma ref evita reinstalar o gerenciador de foco a cada tecla.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -32,7 +39,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -63,7 +70,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       document.body.style.overflow = previousOverflow;
       previousActive?.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

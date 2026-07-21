@@ -34,4 +34,14 @@ for (const relative of [
   assert(!/\.(?:from|rpc)\s*\(/.test(source), `${relative} deve delegar regra financeira ao service compartilhado`);
 }
 
+const modal = read('src/components/ui/Modal.tsx');
+assert(modal.includes('const onCloseRef = useRef(onClose)'), 'Modal deve estabilizar onClose durante o ciclo de foco');
+assert(modal.includes('onCloseRef.current()'), 'Escape deve usar o callback de fechamento mais recente');
+assert(/\}, \[isOpen\]\);/.test(modal), 'efeito de foco do Modal deve depender somente de isOpen');
+
+const agendaSearch = read('src/components/modals/BuscarAgendaModal.tsx');
+assert(agendaSearch.includes('JSON.parse(value)'), 'Busca na agenda deve desserializar serviços legados em string JSON');
+assert(agendaSearch.includes('serviceText(agendamento.servicos)'), 'Busca na agenda deve renderizar serviços pelo normalizador');
+assert(!agendaSearch.includes('Object.values(value)'), 'Busca na agenda não deve expor metadados de objetos de serviço desconhecidos');
+
 console.log('OK: contratos de qualidade, redaction, logs e serviços compartilhados validados.');
