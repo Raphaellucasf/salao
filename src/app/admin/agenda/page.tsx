@@ -2,10 +2,11 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle, Trash2, ZoomIn } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, PlayCircle, Trash2, ZoomIn, MoveRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
 import NovoAgendamentoModal from '@/components/modals/NovoAgendamentoModal';
+import MoverAgendamentoModal from '@/components/modals/MoverAgendamentoModal';
 
 const START_HOUR = 8;
 const END_HOUR = 21;
@@ -20,7 +21,10 @@ interface Appointment {
   startTime: string;
   duration: number;
   status: 'confirmed' | 'pending' | 'cancelled';
+  rawStatus?: string;
   comanda_id?: number;
+  comandaStatus?: string;
+  rootProfessionalId?: string;
   groupColor?: string;
   groupName?: string;
   tem_etapas?: boolean;
@@ -53,13 +57,13 @@ export default function AgendaPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [profissionais, setProfissionais] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [profError, setProfError] = useState<string | null>(null);
   const [comandaDrawerOpen, setComandaDrawerOpen] = useState(false);
   const [selectedComandaId, setSelectedComandaId] = useState<number | undefined>(undefined);
   const [iniciandoAtendimento, setIniciandoAtendimento] = useState<string | null>(null);
+  const [moveAppointment, setMoveAppointment] = useState<Appointment | null>(null);
 
   // Novo agendamento via clique no horário
   const [novoAgOpen, setNovoAgOpen] = useState(false);
@@ -159,7 +163,6 @@ export default function AgendaPage() {
       if (!data || data.length === 0) {
         setProfError('Nenhum profissional encontrado no banco de dados.');
       }
-      setProfissionais(data || []);
       setProfessionals(
         (data || []).map((prof: any) => ({
           id: prof.id,
@@ -215,7 +218,10 @@ export default function AgendaPage() {
               startTime: horaEtapa,
               duration: etapa.duracao_minutos,
               status,
+              rawStatus: ag.status,
               comanda_id: ag.comanda_id,
+              comandaStatus: ag.comanda_status,
+              rootProfessionalId: ag.profissional_id,
               groupColor: profissionalCor,
               groupName: `${servicosStr} (${etapa.ordem}/${etapas.length})`,
               tem_etapas: true,
@@ -247,7 +253,10 @@ export default function AgendaPage() {
             startTime: ag.hora_inicio ? ag.hora_inicio.substring(0, 5) : '00:00',
             duration: ag.duracao_total || 60,
             status,
+            rawStatus: ag.status,
             comanda_id: ag.comanda_id,
+            comandaStatus: ag.comanda_status,
+            rootProfessionalId: ag.profissional_id,
             groupColor: ag.grupo_cor || '#6366F1',
             groupName: ag.grupo_nome,
             tem_etapas: false,
@@ -266,15 +275,21 @@ export default function AgendaPage() {
 
   const excluirAgendamento = useCallback(async (e: React.MouseEvent, apt: Appointment) => {
     e.stopPropagation();
-    if (!confirm(`Excluir agendamento de ${apt.client || 'este atendimento'}?`)) return;
+    const removingSale = apt.comanda_id && apt.comandaStatus === 'aberta';
+    const question = removingSale
+      ? `Cancelar a comanda aberta e excluir o agendamento de ${apt.client || 'este atendimento'}?`
+      : `Remover o agendamento de ${apt.client || 'este atendimento'} da agenda? A venda e o pagamento serão preservados.`;
+    if (!confirm(question)) return;
     try {
       const agendamentoId = apt.agendamento_id || apt.id;
-      if (apt.comanda_id) {
-        const { error } = await supabase.from('comandas').delete().eq('id', apt.comanda_id);
-        if (error) throw error;
+      if (removingSale) {
+        const response = await fetch(`/api/admin/comandas?comanda_id=${apt.comanda_id}`, { method: 'DELETE' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
       } else {
-        const { error } = await supabase.from('agendamentos').delete().eq('id', agendamentoId);
-        if (error) throw error;
+        const response = await fetch(`/api/admin/agendamentos?agendamento_id=${agendamentoId}&remove_from_calendar=true`, { method: 'DELETE' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
       }
       await loadAppointments();
     } catch (err: any) {
@@ -286,43 +301,21 @@ export default function AgendaPage() {
     const agendamentoDbId = apt.agendamento_id || apt.id;
     setIniciandoAtendimento(apt.id);
     try {
-      const { data: ag, error: agError } = await (supabase as any)
-        .from('agendamentos')
-        .select('id, cliente_id, cliente_nome, profissional_id')
-        .eq('id', agendamentoDbId)
-        .single();
-      if (agError) throw agError;
-
-      const { data: novaComanda, error: cmdError } = await (supabase as any)
-        .from('comandas')
-        .insert([{
-          numero_comanda: 0,
-          cliente_id: ag?.cliente_id || null,
-          cliente_nome: ag?.cliente_nome || apt.client,
-          profissional_id: apt.professionalId || ag?.profissional_id || null,
-          data_agendamento: selectedDate.toISOString().split('T')[0],
-          hora_inicio: apt.startTime,
-          status: 'aberta',
-          total: 0,
-          observacoes: `Originada da agenda em ${selectedDate.toLocaleDateString('pt-BR')}`,
-        }])
-        .select()
-        .single();
-      if (cmdError) throw cmdError;
-
-      const { error: updError } = await (supabase as any)
-        .from('agendamentos')
-        .update({ comanda_id: novaComanda.id, status: 'em_andamento' })
-        .eq('id', agendamentoDbId);
-      if (updError) throw updError;
+      const response = await fetch('/api/admin/agendamentos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agendamento_id: agendamentoDbId }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
+      const novaComanda = result.data;
 
       setAppointments(prev => prev.map(a => {
         const aId = a.agendamento_id || a.id;
-        if (aId === agendamentoDbId) return { ...a, comanda_id: novaComanda.id, status: 'confirmed' };
+        if (aId === agendamentoDbId) return { ...a, comanda_id: novaComanda.comanda_id, status: 'confirmed' };
         return a;
       }));
 
-      setSelectedComandaId(novaComanda.id);
+      setSelectedComandaId(novaComanda.comanda_id);
       setComandaDrawerOpen(true);
     } catch (err: any) {
       alert(`Erro ao iniciar atendimento: ${err.message || 'Erro desconhecido'}`);
@@ -410,10 +403,9 @@ export default function AgendaPage() {
       });
 
       if (isOverlapping) {
-        if (!confirm(`Conflito de horário: o profissional já possui outro atendimento neste horário.\nDeseja mover o agendamento mesmo assim?`)) {
-          setDraggedAppointmentId(null);
-          return;
-        }
+        alert('Conflito de horário: o profissional já possui outro atendimento neste período.');
+        setDraggedAppointmentId(null);
+        return;
       }
 
       try {
@@ -728,6 +720,18 @@ export default function AgendaPage() {
                                     <div className="flex justify-between items-start">
                                       <span className="text-xs font-bold text-neutral-800 truncate" title={apt.client}>{apt.client}</span>
                                       <div className="flex items-center gap-0.5">
+                                        {!apt.eh_auxiliar
+                                          && apt.status !== 'cancelled'
+                                          && apt.rawStatus !== 'concluido'
+                                          && apt.comandaStatus !== 'fechada' && (
+                                          <button
+                                            onClick={e => { e.stopPropagation(); setMoveAppointment(apt); }}
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-blue-100 rounded"
+                                            title="Mover para outro dia ou horário"
+                                          >
+                                            <MoveRight className="w-2.5 h-2.5 text-blue-600" />
+                                          </button>
+                                        )}
                                         <button
                                           onClick={e => excluirAgendamento(e, apt)}
                                           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-100 rounded"
@@ -812,6 +816,21 @@ export default function AgendaPage() {
         professionalColor={novoAgData.professionalColor}
         date={selectedDate.toISOString().split('T')[0]}
         time={novoAgData.time}
+        professionals={professionals}
+      />
+      <MoverAgendamentoModal
+        isOpen={moveAppointment !== null}
+        onClose={() => setMoveAppointment(null)}
+        onSuccess={(targetDate) => {
+          const currentDate = selectedDate.toISOString().split('T')[0];
+          if (targetDate === currentDate) void loadAppointments();
+          else setSelectedDate(new Date(`${targetDate}T12:00:00`));
+        }}
+        appointmentId={moveAppointment?.agendamento_id || moveAppointment?.id}
+        clientName={moveAppointment?.client}
+        initialDate={selectedDate.toISOString().split('T')[0]}
+        initialTime={moveAppointment?.startTime}
+        initialProfessionalId={moveAppointment?.rootProfessionalId || moveAppointment?.professionalId}
         professionals={professionals}
       />
     </div>

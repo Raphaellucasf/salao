@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -172,8 +171,8 @@ export default function PromocaoModal({ isOpen, onClose, onSuccess, promocao }: 
     try {
       // Montar array de dias da semana
       const diasArray = Object.entries(diasSemana)
-        .filter(([_, ativo]) => ativo)
-        .map(([dia, _]) => dia);
+        .filter(([, ativo]) => ativo)
+        .map(([dia]) => dia);
 
       const promocaoData = {
         codigo: codigo || null,
@@ -232,7 +231,7 @@ export default function PromocaoModal({ isOpen, onClose, onSuccess, promocao }: 
   ];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={promocao ? 'Editar Promoção' : 'Nova Promoção'} size="xl">
       <div className="px-6 py-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">

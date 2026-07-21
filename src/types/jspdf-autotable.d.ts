@@ -1,9 +1,12 @@
 declare module 'jspdf-autotable' {
   import { jsPDF } from 'jspdf';
 
+  type CellInput = string | number | boolean | null;
+  type StyleOptions = Record<string, string | number | boolean | number[] | undefined>;
+
   interface AutoTableOptions {
-    head?: any[][];
-    body?: any[][];
+    head?: CellInput[][];
+    body?: CellInput[][];
     startY?: number;
     margin?: { top?: number; right?: number; bottom?: number; left?: number };
     styles?: {
@@ -19,10 +22,10 @@ declare module 'jspdf-autotable' {
       textColor?: number | [number, number, number];
       fontStyle?: 'normal' | 'bold' | 'italic' | 'bolditalic';
     };
-    headStyles?: any;
-    bodyStyles?: any;
-    alternateRowStyles?: any;
-    columnStyles?: any;
+    headStyles?: StyleOptions;
+    bodyStyles?: StyleOptions;
+    alternateRowStyles?: StyleOptions;
+    columnStyles?: Record<string | number, StyleOptions>;
     theme?: 'striped' | 'grid' | 'plain';
     showHead?: 'everyPage' | 'firstPage' | 'never';
     showFoot?: 'everyPage' | 'lastPage' | 'never';

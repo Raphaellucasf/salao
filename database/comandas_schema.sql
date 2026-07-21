@@ -1,6 +1,7 @@
 -- ================================================
 -- SCHEMA DE COMANDAS - SISTEMA DIMAS
--- Execute este script no Supabase SQL Editor
+-- Bootstrap legado. Prefira as migrações versionadas em supabase/migrations.
+-- Não execute isoladamente em produção.
 -- ================================================
 
 -- TABELA DE COMANDAS
@@ -71,26 +72,34 @@ BEGIN
 END $$;
 
 -- Função para gerar próximo número de comanda
+SELECT setval(
+  'public.comandas_numero_seq',
+  COALESCE((SELECT MAX(numero_comanda) + 1 FROM public.comandas), 1),
+  false
+);
+
 CREATE OR REPLACE FUNCTION gerar_numero_comanda()
-RETURNS INTEGER AS $$
-DECLARE
-  proximo_numero INTEGER;
-BEGIN
-  SELECT COALESCE(MAX(numero_comanda), 0) + 1 INTO proximo_numero FROM comandas;
-  RETURN proximo_numero;
-END;
-$$ LANGUAGE plpgsql;
+RETURNS INTEGER
+LANGUAGE sql
+VOLATILE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT nextval('public.comandas_numero_seq')::integer;
+$$;
 
 -- Função para auto-gerar número da comanda antes de inserir
 CREATE OR REPLACE FUNCTION set_numero_comanda()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
 BEGIN
   IF NEW.numero_comanda IS NULL OR NEW.numero_comanda = 0 THEN
-    NEW.numero_comanda := gerar_numero_comanda();
+    NEW.numero_comanda := nextval('public.comandas_numero_seq')::integer;
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Trigger para gerar número da comanda automaticamente
 DROP TRIGGER IF EXISTS trigger_set_numero_comanda ON comandas;
@@ -103,11 +112,13 @@ CREATE TRIGGER trigger_set_numero_comanda
 ALTER TABLE comandas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comanda_itens ENABLE ROW LEVEL SECURITY;
 
--- Políticas de acesso (permitir tudo para usuários autenticados e anônimos)
+-- Compatibilidade do bootstrap: nunca concede acesso anônimo. As migrações
+-- posteriores substituem estas policies pela matriz canônica do aplicativo.
 DROP POLICY IF EXISTS "Permitir tudo em comandas para usuários autenticados" ON comandas;
 CREATE POLICY "Permitir tudo em comandas para usuários autenticados"
   ON comandas
   FOR ALL
+  TO authenticated
   USING (true)
   WITH CHECK (true);
 
@@ -115,6 +126,7 @@ DROP POLICY IF EXISTS "Permitir tudo em comanda_itens para usuários autenticado
 CREATE POLICY "Permitir tudo em comanda_itens para usuários autenticados"
   ON comanda_itens
   FOR ALL
+  TO authenticated
   USING (true)
   WITH CHECK (true);
 

@@ -6,18 +6,18 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Clock, User, Phone, Edit, Trash2 } from 'lucide-react';
+import { Calendar, User, Phone, Edit, Trash2 } from 'lucide-react';
 
 interface Agendamento {
   id: string;
   data_hora: string;
   cliente_nome: string;
-  cliente_telefone?: string;
+  cliente_telefone?: string | null;
   profissional_nome: string;
   servico_nome: string;
   status: string;
-  valor?: number;
-  observacoes?: string;
+  valor?: number | null;
+  observacoes?: string | null;
 }
 
 export default function AgendamentosFuturosPage() {
@@ -27,15 +27,12 @@ export default function AgendamentosFuturosPage() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    loadAgendamentos();
-  }, [periodo]);
-
-  const loadAgendamentos = async () => {
+    const loadAgendamentos = async () => {
     try {
       setLoading(true);
 
       const hoje = new Date();
-      let dataLimite = new Date();
+      const dataLimite = new Date();
 
       if (periodo === '7dias') {
         dataLimite.setDate(hoje.getDate() + 7);
@@ -61,9 +58,7 @@ export default function AgendamentosFuturosPage() {
             nome,
             telefone
           ),
-          profissionais (
-            nome
-          )
+          profissional:profissionais!agendamentos_profissional_id_fkey(nome)
         `)
         .gte('data_agendamento', hoje.toISOString().split('T')[0])
         .lte('data_agendamento', dataLimite.toISOString().split('T')[0])
@@ -73,12 +68,15 @@ export default function AgendamentosFuturosPage() {
 
       if (error) throw error;
 
-      const agendamentosFormatados = (data || []).map((ag: any) => {
+      const agendamentosFormatados = (data || []).map((ag) => {
         let servicoNome = 'Serviço não informado';
         try {
           const servs = typeof ag.servicos === 'string' ? JSON.parse(ag.servicos) : ag.servicos;
           if (Array.isArray(servs) && servs.length > 0) {
-            servicoNome = servs.map((s: any) => s.nome).join(', ');
+            servicoNome = servs
+              .map((value: unknown) => typeof value === 'object' && value !== null && 'nome' in value ? String(value.nome) : '')
+              .filter(Boolean)
+              .join(', ');
           }
         } catch {}
         return {
@@ -86,9 +84,9 @@ export default function AgendamentosFuturosPage() {
           data_hora: `${ag.data_agendamento}T${ag.hora_inicio}`,
           cliente_nome: ag.clientes?.nome || 'Cliente não informado',
           cliente_telefone: ag.clientes?.telefone,
-          profissional_nome: ag.profissionais?.nome || 'Profissional não informado',
+          profissional_nome: ag.profissional?.nome || 'Profissional não informado',
           servico_nome: servicoNome,
-          status: ag.status,
+          status: ag.status ?? 'agendado',
           valor: ag.valor_total,
           observacoes: ag.observacoes,
         };
@@ -101,7 +99,9 @@ export default function AgendamentosFuturosPage() {
     } finally {
       setLoading(false);
     }
-  };
+    };
+    void loadAgendamentos();
+  }, [periodo]);
 
   const agendamentosFiltrados = agendamentos.filter(ag =>
     search === '' ||
@@ -119,7 +119,7 @@ export default function AgendamentosFuturosPage() {
   }, {} as Record<string, Agendamento[]>);
 
   const getStatusBadge = (status: string) => {
-    const badges: Record<string, { variant: any; label: string }> = {
+    const badges: Record<string, { variant: 'warning' | 'success'; label: string }> = {
       agendado: { variant: 'warning', label: 'Agendado' },
       confirmado: { variant: 'success', label: 'Confirmado' }
     };

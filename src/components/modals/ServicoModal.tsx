@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -195,30 +194,16 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
         usa_produtos: usaProdutos
       };
 
-      let servicoId = servico?.id;
-
-      if (servico?.id) {
-        const { error } = await supabase
-          .from('servicos')
-          .update(dados)
-          .eq('id', servico.id);
-
-        if (error) throw error;
-      } else {
-        const novoId = crypto.randomUUID();
-        const { data: novoServico, error } = await supabase
-          .from('servicos')
-          .insert({ ...dados, id: novoId })
-          .select()
-          .single();
-
-        if (error) throw error;
-        servicoId = novoServico.id;
-      }
-
-      if (temEtapas && servicoId) {
-        await salvarEtapas(servicoId);
-      }
+      const response = await fetch('/api/admin/servicos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          servico: { ...dados, ...(servico?.id ? { id: servico.id } : {}) },
+          etapas: temEtapas ? etapas : [],
+          request_id: crypto.randomUUID(),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Erro ao salvar serviço');
 
       alert(servico ? 'Serviço atualizado com sucesso!' : 'Serviço criado com sucesso!');
       onSuccess?.();
@@ -230,37 +215,6 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
       setLoading(false);
     }
   }, [nome, preco, grupoId, codigo, descricao, termosBusca, termoInput, duracao, ativo, observacoes, servico, temEtapas, duracaoCalculada, etapas, usaProdutos, onSuccess, handleClose]);
-
-  const salvarEtapas = async (servicoId: string) => {
-    try {
-      // Deletar todas as etapas existentes
-      await supabase
-        .from('servico_etapas')
-        .delete()
-        .eq('servico_id', servicoId);
-
-      const etapasParaSalvar = etapas.map((etapa, index) => ({
-        id: crypto.randomUUID(),
-        servico_id: servicoId,
-        ordem: index + 1,
-        nome: etapa.nome,
-        descricao: etapa.descricao || null,
-        duracao_minutos: etapa.duracao_minutos,
-        pode_ter_auxiliar: etapa.pode_ter_auxiliar !== false,
-        exige_profissional: etapa.exige_profissional !== false,
-        ativo: true
-      }));
-
-      const { error } = await supabase
-        .from('servico_etapas')
-        .insert(etapasParaSalvar);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Erro ao salvar etapas:', error);
-      throw error;
-    }
-  };
 
   const renderEtapasSection = () => {
     if (!temEtapas) return null;

@@ -13,7 +13,7 @@ O sistema de autenticação com controle de acesso baseado em roles (RBAC) foi *
 ### Segurança em 3 Camadas
 
 #### 1️⃣ Camada de Banco de Dados (PostgreSQL + RLS)
-**Arquivo:** `database/migration_auth.sql`
+**Fonte canônica atual:** `supabase/migrations/`
 
 **Implementações:**
 - ✅ Trigger `handle_new_user()` - Sincroniza automaticamente `auth.users` → `public.users`
@@ -129,18 +129,18 @@ const {
 ## 📦 Arquivos de Seed
 
 ### Script de Criação de Usuários
-**Arquivo:** `database/seed_users.sql`
+**Procedimento atual:** criar contas descartáveis no Auth do ambiente de teste autorizado.
 
 **Cria 3 usuários de teste:**
 
 1. **Admin (Sr. Dimas)**
    - Email: `dimas@salaodimas.com`
-   - Senha: `Dimas@2024`
+   - Senha: variável local `E2E_ADMIN_PASSWORD`
    - Role: `admin`
 
 2. **Profissional (João)**
    - Email: `joao@salaodimas.com`
-   - Senha: `Joao@2024`
+   - Senha: variável local `E2E_PROFESSIONAL_PASSWORD`
    - Role: `professional`
    - Especialidades: Corte Masculino, Barba
 
@@ -168,18 +168,14 @@ const {
 
 2. **Executar SQL:**
    - SQL Editor → Nova query
-   - Cole todo conteúdo de `database/schema.sql`
-   - Execute (Run)
-   - Nova query → Cole `database/migration_auth.sql`
-   - Execute
-   - Nova query → Cole `database/seed_users.sql`
-   - Execute
+   - Não execute SQLs legados de `database/`.
+   - Siga `supabase/README.md` e a cadeia ordenada `supabase/migrations/`.
 
 3. **Configurar variáveis:**
    ```env
    # .env.local
    NEXT_PUBLIC_SUPABASE_URL=sua_url_aqui
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_aqui
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
    ```
 
 ### Etapa 2: Iniciar Aplicação
@@ -192,12 +188,12 @@ npm run dev
 
 #### ✅ Teste 1: Login Admin
 1. Acesse http://localhost:3000/login
-2. Login: `dimas@salaodimas.com` / `Dimas@2024`
+2. Login: `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`
 3. Deve redirecionar para `/admin`
 4. Sidebar deve mostrar TODOS os menus
 
 #### ✅ Teste 2: Login Profissional
-1. Logout → Login: `joao@salaodimas.com` / `Joao@2024`
+1. Logout → Login: `E2E_PROFESSIONAL_EMAIL` / `E2E_PROFESSIONAL_PASSWORD`
 2. Deve redirecionar para `/profissionais`
 3. Sidebar NÃO deve mostrar: Financeiro, Relatórios, Estoque, Configurações
 

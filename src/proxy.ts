@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { createRequestSupabase } from '@/lib/supabase-request';
 
 /**
  * Middleware de autenticação — Otimiza Beauty
@@ -10,13 +10,17 @@ import { NextResponse, type NextRequest } from 'next/server';
  * A validação completa de role ocorre no servidor via requireAdmin() nas API routes.
  */
 
-const PUBLIC_PATHS = ['/login', '/agendar', '/api/appointments', '/api/whatsapp'];
-
-function isPublicPath(pathname: string): boolean {
+function isPublicPath(pathname: string, method: string): boolean {
   if (pathname === '/') return true;
-  return PUBLIC_PATHS.some(
-    (p) => pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?')
-  );
+  if (pathname === '/login' || pathname.startsWith('/login/')) return true;
+  if (pathname === '/agendar' || pathname.startsWith('/agendar/')) return true;
+  if (pathname === '/api/whatsapp' || pathname.startsWith('/api/whatsapp/')) return true;
+
+  // O fluxo público pode apenas consultar disponibilidade e criar agendamentos.
+  if (pathname === '/api/appointments' && method === 'POST') return true;
+  if (pathname === '/api/appointments/availability' && method === 'GET') return true;
+
+  return false;
 }
 
 export default async function proxy(request: NextRequest) {
@@ -32,7 +36,7 @@ export default async function proxy(request: NextRequest) {
   }
 
   // Rotas públicas — sem verificação de autenticação
-  if (isPublicPath(pathname)) {
+  if (isPublicPath(pathname, request.method)) {
     return NextResponse.next();
   }
 
@@ -40,24 +44,7 @@ export default async function proxy(request: NextRequest) {
   // atualizar os cookies de sessão (refresh token) quando necessário.
   const response = NextResponse.next();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          // Propagar cookies de sessão atualizados para o browser
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    }
-  );
+  const supabase = createRequestSupabase(request, response);
 
   // Validação real do JWT — getUser() verifica assinatura no Supabase Auth Server
   const {

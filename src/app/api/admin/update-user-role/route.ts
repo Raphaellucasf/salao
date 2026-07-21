@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createServerSupabase } from '@/lib/supabase-server';
 import { requireAdmin } from '@/lib/api-auth';
 
 /**
@@ -11,6 +11,7 @@ import { requireAdmin } from '@/lib/api-auth';
 export async function PATCH(req: NextRequest) {
   const authCheck = await requireAdmin(req);
   if (authCheck instanceof NextResponse) return authCheck;
+  const supabaseAdmin = createServerSupabase(authCheck.unitId);
 
   try {
     const body = await req.json();
@@ -20,35 +21,28 @@ export async function PATCH(req: NextRequest) {
       roleNivel,  // nivel numérico da role
     } = body;
 
-    if (!authId) {
+    if (typeof authId !== 'string' || !/^[0-9a-f-]{36}$/i.test(authId)) {
       return NextResponse.json({ error: 'authId é obrigatório' }, { status: 400 });
     }
 
     const isAdmin = roleNivel >= 80 || roleName?.toLowerCase().includes('admin');
     const authRole: 'admin' | 'professional' = isAdmin ? 'admin' : 'professional';
 
-    // Atualiza user_metadata no Auth
-    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(authId, {
-      user_metadata: { role: authRole },
-    });
-
-    if (authError) {
-      return NextResponse.json({ error: authError.message }, { status: 400 });
-    }
-
-    // Atualiza tabela users
-    const { error: usersError } = await supabaseAdmin
+    // A role canônica vive somente em public.users. user_metadata é editável pelo cliente.
+    const { data: updatedUser, error: usersError } = await supabaseAdmin
       .from('users')
       .update({ role: authRole })
-      .eq('id', authId);
+      .eq('id', authId)
+      .select('id')
+      .maybeSingle();
 
-    if (usersError) {
-      console.error('Aviso: erro ao atualizar users.role:', usersError.message);
+    if (usersError || !updatedUser) {
+      return NextResponse.json({ error: 'Não foi possível atualizar a função do usuário' }, { status: usersError ? 400 : 404 });
     }
 
     return NextResponse.json({ success: true, authRole });
 
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }

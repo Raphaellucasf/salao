@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/api-auth';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 // =====================================================
 // API DE BUSCA INTELIGENTE DE SERVIÇOS
@@ -8,17 +8,25 @@ import { supabase } from '@/lib/supabase';
 // =====================================================
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q'); // Termo de busca
-    const unitId = searchParams.get('unit_id');
     const category = searchParams.get('category');
+    const supabase = createServerSupabase(authResult.unitId);
+
+    if (query && query.trim().length > 80) {
+      return NextResponse.json({ error: 'Termo de busca muito longo' }, { status: 400 });
+    }
 
     if (!query || query.trim().length < 2) {
       // Se não tem busca, retorna todos os serviços ativos
       let servicesQuery = supabase
         .from('servicos')
         .select('*')
+        .eq('unit_id', authResult.unitId)
         .eq('ativo', true)
         .order('categoria', { ascending: true })
         .order('nome', { ascending: true });
@@ -39,41 +47,47 @@ export async function GET(request: NextRequest) {
     // =====================================================
     const searchTerm = query.trim().toLowerCase();
 
-    // 1. Busca exata no nome (prioridade máxima)
+    // Consultas independentes são executadas em paralelo. Não interpolamos texto
+    // do usuário em filtros PostgREST compostos.
     let exactQuery = supabase
       .from('servicos')
       .select('*')
+      .eq('unit_id', authResult.unitId)
       .eq('ativo', true)
       .ilike('nome', `%${searchTerm}%`);
 
     if (category) exactQuery = exactQuery.eq('categoria', category);
 
-    const { data: exactMatches } = await exactQuery;
-
-    // 2. Busca nas keywords/tags (JSONB contains)
     let keywordsQuery = supabase
       .from('servicos')
       .select('*')
+      .eq('unit_id', authResult.unitId)
       .eq('ativo', true)
-      .contains('keywords', [searchTerm]);
+      .contains('termos_busca', [searchTerm]);
 
     if (category) keywordsQuery = keywordsQuery.eq('categoria', category);
 
-    const { data: keywordMatches } = await keywordsQuery;
-
-    // 3. Busca nas keywords e descrição
-    let fuzzyQuery = supabase
+    let descriptionQuery = supabase
       .from('servicos')
       .select('*')
+      .eq('unit_id', authResult.unitId)
       .eq('ativo', true)
-      .or(`keywords.cs.{"%${searchTerm}%"},descricao.ilike.%${searchTerm}%`);
+      .ilike('descricao', `%${searchTerm}%`);
 
-    if (category) fuzzyQuery = fuzzyQuery.eq('categoria', category);
+    if (category) descriptionQuery = descriptionQuery.eq('categoria', category);
 
-    const { data: fuzzyMatches } = await fuzzyQuery;
-
-    // Sem FTS (search_vector não disponível na nova tabela)
-    const ftsMatches: any[] = [];
+    const [exactResult, keywordResult, descriptionResult] = await Promise.all([
+      exactQuery,
+      keywordsQuery,
+      descriptionQuery,
+    ]);
+    const queryError = exactResult.error || keywordResult.error || descriptionResult.error;
+    if (queryError) {
+      return NextResponse.json({ error: queryError.message }, { status: 500 });
+    }
+    const exactMatches = exactResult.data ?? [];
+    const keywordMatches = keywordResult.data ?? [];
+    const descriptionMatches = descriptionResult.data ?? [];
 
     // =====================================================
     // COMBINAR E REMOVER DUPLICATAS
@@ -81,8 +95,7 @@ export async function GET(request: NextRequest) {
     const allResults = [
       ...(exactMatches || []),
       ...(keywordMatches || []),
-      ...(fuzzyMatches || []),
-      ...(ftsMatches || [])
+      ...(descriptionMatches || []),
     ];
 
     // Remover duplicatas por ID e calcular score
@@ -98,23 +111,23 @@ export async function GET(request: NextRequest) {
           }
           
           // Keyword exata
-          if (service.keywords && Array.isArray(service.keywords)) {
-            if (service.keywords.includes(searchTerm)) {
+          if (service.termos_busca && Array.isArray(service.termos_busca)) {
+            if (service.termos_busca.includes(searchTerm)) {
               score += 80;
             }
             // Keyword parcial
-            if (service.keywords.some((kw: string) => kw.includes(searchTerm))) {
+            if (service.termos_busca.some((kw: string) => kw.includes(searchTerm))) {
               score += 50;
             }
           }
           
           // Descrição
-          if (service.description?.toLowerCase().includes(searchTerm)) {
+          if (service.descricao?.toLowerCase().includes(searchTerm)) {
             score += 30;
           }
           
           // Categoria
-          if (service.category?.toLowerCase().includes(searchTerm)) {
+          if (service.categoria?.toLowerCase().includes(searchTerm)) {
             score += 20;
           }
 
@@ -130,7 +143,7 @@ export async function GET(request: NextRequest) {
         return b.relevance_score - a.relevance_score;
       }
       // Depois por preço (mais barato primeiro)
-      return a.price - b.price;
+      return Number(a.preco || 0) - Number(b.preco || 0);
     });
 
     // =====================================================
@@ -169,8 +182,7 @@ export async function GET(request: NextRequest) {
       total_results: sortedResults.length,
       exact_matches: exactMatches?.length || 0,
       keyword_matches: keywordMatches?.length || 0,
-      fuzzy_matches: fuzzyMatches?.length || 0,
-      fts_matches: ftsMatches?.length || 0
+      description_matches: descriptionMatches.length,
     };
 
     return NextResponse.json({
@@ -180,8 +192,7 @@ export async function GET(request: NextRequest) {
       stats
     });
 
-  } catch (error) {
-    console.error('Search error:', error);
+  } catch {
     return NextResponse.json(
       { error: 'Erro na busca' },
       { status: 500 }

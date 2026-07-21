@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -98,7 +97,27 @@ export default function UsuarioModal({ isOpen, onClose, onSuccess, usuario }: Us
       .order('nivel', { ascending: false });
     
     if (error) console.error('[UsuarioModal] erro ao carregar roles:', error);
-    if (data) setRoles(data);
+    if (data) setRoles(data.map((role) => ({
+      ...role,
+      descricao: role.descricao ?? '',
+      cor: role.cor ?? '#64748b',
+      permissoes_agenda: role.permissoes_agenda ?? {},
+      permissoes_clientes: role.permissoes_clientes ?? {},
+      permissoes_profissionais: role.permissoes_profissionais ?? {},
+      permissoes_produtos: role.permissoes_produtos ?? {},
+      permissoes_servicos: role.permissoes_servicos ?? {},
+      permissoes_financeiro: role.permissoes_financeiro ?? {},
+      permissoes_relatorios: role.permissoes_relatorios ?? {},
+      permissoes_configuracoes: role.permissoes_configuracoes ?? {},
+      permissoes_usuarios: role.permissoes_usuarios ?? {},
+      pode_abrir_caixa: role.pode_abrir_caixa ?? false,
+      pode_fechar_caixa: role.pode_fechar_caixa ?? false,
+      pode_dar_desconto: role.pode_dar_desconto ?? false,
+      desconto_maximo_percentual: role.desconto_maximo_percentual ?? 0,
+      pode_cancelar_venda: role.pode_cancelar_venda ?? false,
+      pode_editar_comissao: role.pode_editar_comissao ?? false,
+      pode_acessar_todos_profissionais: role.pode_acessar_todos_profissionais ?? false,
+    })));
   };
 
   const resetForm = () => {
@@ -248,7 +267,7 @@ export default function UsuarioModal({ isOpen, onClose, onSuccess, usuario }: Us
   const roleAtual = roles.find(r => r.id === roleId);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={usuario ? 'Editar Usuário' : 'Novo Usuário'} size="xl">
       <div className="px-6 py-4 border-b flex items-center justify-between">
         <h2 className="text-xl font-semibold">
           {usuario ? 'Editar Usuário' : 'Novo Usuário'}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createServerSupabase } from '@/lib/supabase-server';
 import { requireAdmin } from '@/lib/api-auth';
 
 /**
@@ -11,6 +11,7 @@ import { requireAdmin } from '@/lib/api-auth';
 export async function POST(req: NextRequest) {
   const authCheck = await requireAdmin(req);
   if (authCheck instanceof NextResponse) return authCheck;
+  const supabaseAdmin = createServerSupabase(authCheck.unitId);
 
   try {
     const { id, authId } = await req.json();
@@ -26,7 +27,6 @@ export async function POST(req: NextRequest) {
       .eq('id', id);
 
     if (deleteError) {
-      console.error('Erro ao deletar de usuarios:', deleteError);
       return NextResponse.json({ error: deleteError.message }, { status: 400 });
     }
 
@@ -36,14 +36,12 @@ export async function POST(req: NextRequest) {
 
       const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(authId);
       if (authError) {
-        console.error('Aviso: erro ao remover do Auth:', authError.message);
         // Não bloqueia — registro da tabela já foi removido
       }
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error('Erro interno delete-user:', err);
-    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Erro interno' }, { status: 500 });
   }
 }

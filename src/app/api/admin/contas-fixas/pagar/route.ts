@@ -1,76 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { requireAdmin } from '@/lib/api-auth';
+import { invalidateFinancialStats } from '@/lib/financial-stats-cache';
 
-const DEFAULT_UNIT_ID = '00000000-0000-0000-0000-000000000001';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-// POST /api/admin/contas-fixas/pagar
-// Body: { conta_fixa_id, valor_pago, data_pagamento, observacao, user_id }
 export async function POST(req: NextRequest) {
   const authResult = await requireAdmin(req);
   if (authResult instanceof NextResponse) return authResult;
 
   try {
     const body = await req.json();
-    const { conta_fixa_id, valor_pago, data_pagamento, observacao, user_id } = body;
+    const amount = Number(body.valor_pago);
+    const paymentDate = typeof body.data_pagamento === 'string'
+      ? body.data_pagamento
+      : new Date().toISOString().slice(0, 10);
+    const note = typeof body.observacao === 'string' ? body.observacao.trim() : '';
+    const requestId = typeof body.request_id === 'string' && UUID_PATTERN.test(body.request_id)
+      ? body.request_id
+      : crypto.randomUUID();
 
-    if (!conta_fixa_id || valor_pago === undefined) {
-      return NextResponse.json(
-        { error: 'conta_fixa_id e valor_pago são obrigatórios' },
-        { status: 400 },
-      );
+    if (!UUID_PATTERN.test(body.conta_fixa_id ?? '') || !Number.isFinite(amount) || amount <= 0
+      || amount > 100_000_000 || !DATE_PATTERN.test(paymentDate)
+      || Number.isNaN(Date.parse(`${paymentDate}T00:00:00Z`)) || note.length > 500) {
+      return NextResponse.json({ error: 'Dados do pagamento inválidos' }, { status: 400 });
     }
 
-    const supabase = createServerSupabase();
+    const supabase = createServerSupabase(authResult.unitId);
+    const { data, error } = await supabase.rpc('pay_fixed_account_atomic', {
+      p_unit_id: authResult.unitId,
+      p_fixed_account_id: body.conta_fixa_id,
+      p_amount: Math.round(amount * 100) / 100,
+      p_payment_date: paymentDate,
+      p_note: note || null,
+      p_actor_id: authResult.id,
+      p_request_id: requestId,
+    });
 
-    // 1. Busca dados da conta fixa
-    const { data: conta, error: errConta } = await (supabase as any)
-      .from('contas_fixas')
-      .select('nome, categoria')
-      .eq('id', conta_fixa_id)
-      .eq('unit_id', DEFAULT_UNIT_ID)
-      .maybeSingle();
-
-    if (errConta || !conta) {
-      return NextResponse.json({ error: 'Conta fixa não encontrada' }, { status: 404 });
+    if (error) {
+      const status = error.message === 'fixed_account_not_found' ? 404 : 400;
+      return NextResponse.json({ error: status === 404 ? 'Conta fixa não encontrada' : 'Não foi possível registrar o pagamento' }, { status });
     }
 
-    const dataPag = data_pagamento ?? new Date().toISOString().split('T')[0];
-
-    // 2. Cria transação de despesa
-    const { data: transacao, error: errTx } = await (supabase as any)
-      .from('transacoes')
-      .insert([{
-        unit_id: DEFAULT_UNIT_ID,
-        tipo: 'despesa',
-        valor: Number(valor_pago),
-        descricao: `Conta fixa: ${conta.nome}${observacao ? ` — ${observacao}` : ''}`,
-        categoria: conta.categoria ?? 'contas_fixas',
-        data: dataPag,
-        metodo: 'dinheiro',
-      }])
-      .select('id')
-      .single();
-
-    if (errTx) return NextResponse.json({ error: errTx.message }, { status: 500 });
-
-    // 3. Registra pagamento da conta fixa
-    const { error: errPag } = await (supabase as any)
-      .from('contas_fixas_pagamentos')
-      .insert([{
-        unit_id: DEFAULT_UNIT_ID,
-        conta_fixa_id,
-        valor_pago: Number(valor_pago),
-        data_pagamento: dataPag,
-        transacao_id: transacao?.id ?? null,
-        observacao: observacao ?? null,
-        pago_por: user_id ?? null,
-      }]);
-
-    if (errPag) return NextResponse.json({ error: errPag.message }, { status: 500 });
-
-    return NextResponse.json({ ok: true, transacao_id: transacao?.id });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Erro interno' }, { status: 500 });
+    invalidateFinancialStats();
+    const result = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    return NextResponse.json({ ok: true, ...result });
+  } catch {
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }

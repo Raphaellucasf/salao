@@ -1,0 +1,38 @@
+-- Evaluate auth helpers once per statement instead of once per row.
+-- Policy semantics, commands and roles are intentionally unchanged.
+alter policy "Admins gerenciam agendamentos" on public.agendamentos using ((select auth.uid()) is not null);
+alter policy "Autenticados criam agendamentos" on public.agendamentos with check ((select auth.uid()) is not null);
+alter policy "Somente autenticados leem agendamentos" on public.agendamentos using ((select auth.uid()) is not null);
+alter policy "Admins e recepcionistas gerenciam clientes" on public.clientes using ((select auth.uid()) is not null);
+alter policy "Somente autenticados leem clientes" on public.clientes using ((select auth.uid()) is not null);
+alter policy auth_all_comanda_item_etapas on public.comanda_item_etapas using ((select auth.role()) = any (array['authenticated'::text, 'service_role'::text]));
+alter policy "Autenticados gerenciam comanda_itens" on public.comanda_itens using ((select auth.uid()) is not null);
+alter policy "Somente autenticados leem comanda_itens" on public.comanda_itens using ((select auth.uid()) is not null);
+alter policy "Autenticados gerenciam comandas" on public.comandas using ((select auth.uid()) is not null);
+alter policy "Somente autenticados leem comandas" on public.comandas using ((select auth.uid()) is not null);
+alter policy "Autenticados podem inserir movimentacoes" on public.estoque_movimentacoes with check ((select auth.role()) = 'authenticated'::text);
+alter policy "Autenticados podem ver movimentacoes" on public.estoque_movimentacoes using ((select auth.role()) = 'authenticated'::text);
+alter policy fechamentos_caixa_insert on public.fechamentos_caixa with check ((select auth.uid()) in (select u.id from public.users u where u.role::text = 'admin'::text));
+alter policy fechamentos_caixa_select on public.fechamentos_caixa using ((select auth.uid()) is not null);
+alter policy fechamentos_caixa_update on public.fechamentos_caixa using ((select auth.uid()) in (select u.id from public.users u where u.role::text = 'admin'::text));
+alter policy "Somente autenticados leem fornecedores" on public.fornecedores using ((select auth.uid()) is not null);
+alter policy "Somente autenticados leem grupos_produtos" on public.grupos_produtos using ((select auth.uid()) is not null);
+alter policy pacotes_cliente_insert on public.pacotes_cliente with check ((select auth.uid()) is not null);
+alter policy pacotes_cliente_select on public.pacotes_cliente using ((select auth.uid()) is not null);
+alter policy pacotes_cliente_update on public.pacotes_cliente using ((select auth.uid()) is not null);
+alter policy "Somente autenticados leem produtos" on public.produtos using ((select auth.uid()) is not null);
+alter policy auth_all_produtos on public.produtos using ((select auth.role()) = any (array['authenticated'::text, 'service_role'::text]));
+alter policy "Autenticados podem ler profissionais" on public.profissionais using (((select auth.uid()) is not null) or ativo = true);
+alter policy "Somente autenticados leem servico_etapas" on public.servico_etapas using ((select auth.uid()) is not null);
+alter policy auth_all_servico_etapas on public.servico_etapas using ((select auth.role()) = any (array['authenticated'::text, 'service_role'::text]));
+alter policy auth_all_transacoes on public.transacoes using ((select auth.role()) = any (array['authenticated'::text, 'service_role'::text]));
+alter policy auth_all_units on public.units using ((select auth.role()) = any (array['authenticated'::text, 'service_role'::text]));
+alter policy auth_all_users on public.users using (((select auth.uid()) = id) or ((select auth.role()) = 'service_role'::text));
+alter policy "Usuario ve proprio registro" on public.usuarios using ((select auth.uid()) is not null);
+alter policy usuarios_delete_admin on public.usuarios using (exists (select 1 from public.users where users.id = (select auth.uid()) and users.role::text = 'admin'::text));
+alter policy usuarios_insert_admin on public.usuarios with check (exists (select 1 from public.users where users.id = (select auth.uid()) and users.role::text = 'admin'::text));
+alter policy usuarios_select_admin on public.usuarios using (exists (select 1 from public.users where users.id = (select auth.uid()) and users.role::text = 'admin'::text));
+alter policy usuarios_select_own on public.usuarios using (auth_id = (select auth.uid()));
+alter policy usuarios_update_admin on public.usuarios using (exists (select 1 from public.users where users.id = (select auth.uid()) and users.role::text = 'admin'::text));
+alter policy usuarios_update_own on public.usuarios using (auth_id = (select auth.uid())) with check (auth_id = (select auth.uid()));
+alter policy webhook_log_select on public.webhook_log using ((select auth.uid()) is not null);

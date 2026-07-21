@@ -1,32 +1,34 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = 'https://woshbfbqgfxkenzylfub.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indvc2hiZmJxZ2Z4a2VuenlsZnViIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzA1MjYxNywiZXhwIjoyMDkyNjI4NjE3fQ.hnQAtqEsZcecpCBBIdf73kGCOxMPo4mWScflj1tq_DA';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SECRET_KEY;
+const targetUserId = process.env.TARGET_ADMIN_USER_ID;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-async function fixRoles() {
-  // Get all users
-  const { data: users, error } = await supabase.from('users').select('*');
-  if (error) {
-    console.error('Error fetching users:', error);
-    return;
-  }
-  
-  console.log('Found users:', users);
-  
-  for (const user of users) {
-    if (user.role !== 'admin') {
-      const { error: updateError } = await supabase.from('users').update({ role: 'admin' }).eq('id', user.id);
-      if (updateError) {
-        console.error('Error updating user:', updateError);
-      } else {
-        console.log(`Updated user ${user.email} to admin role.`);
-      }
-    } else {
-      console.log(`User ${user.email} is already admin.`);
-    }
-  }
+if (!supabaseUrl || !supabaseKey || !targetUserId) {
+  console.error(
+    'Variáveis obrigatórias: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY e TARGET_ADMIN_USER_ID.'
+  );
+  process.exitCode = 1;
+} else {
+  promoteSingleUser().catch((error) => {
+    console.error('Falha ao atualizar o usuário solicitado:', error);
+    process.exitCode = 1;
+  });
 }
 
-fixRoles();
+async function promoteSingleUser() {
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ role: 'admin' })
+    .eq('id', targetUserId)
+    .select('id, role')
+    .single();
+
+  if (error) throw error;
+  console.log('Papel atualizado para o usuário explicitamente informado:', data.id);
+}

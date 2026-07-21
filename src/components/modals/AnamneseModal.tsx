@@ -1,12 +1,9 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { supabase } from '@/lib/supabase';
 
 interface AnamneseModalProps {
   isOpen: boolean;
@@ -14,6 +11,7 @@ interface AnamneseModalProps {
   clienteId: string;
   tipo: 'capilar' | 'corporal_facial' | 'podologica' | 'micropigmentacao';
   anamnese?: any;
+  cliente?: any;
   onSave: () => void;
 }
 
@@ -24,10 +22,9 @@ const TIPOS_ANAMNESE = {
   micropigmentacao: 'Anamnese Micropigmentação',
 };
 
-export default function AnamneseModal({ isOpen, onClose, clienteId, tipo, anamnese, onSave }: AnamneseModalProps) {
+export default function AnamneseModal({ isOpen, onClose, clienteId, tipo, anamnese, cliente, onSave }: AnamneseModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [cliente, setCliente] = useState<any>(null);
 
   const [formData, setFormData] = useState<any>({
     // Dados Capilar
@@ -84,27 +81,11 @@ export default function AnamneseModal({ isOpen, onClose, clienteId, tipo, anamne
 
   useEffect(() => {
     if (isOpen && clienteId) {
-      loadCliente();
       if (anamnese) {
         setFormData(anamnese);
       }
     }
   }, [isOpen, clienteId, anamnese]);
-
-  const loadCliente = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select('*')
-        .eq('id', clienteId)
-        .single();
-
-      if (error) throw error;
-      setCliente(data);
-    } catch (err) {
-      console.error('Erro ao carregar cliente:', err);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,27 +94,19 @@ export default function AnamneseModal({ isOpen, onClose, clienteId, tipo, anamne
 
     try {
       const dataToSave = {
+        ...(anamnese ? { id: anamnese.id } : {}),
         cliente_id: clienteId,
         tipo,
         ...formData,
       };
 
-      if (anamnese) {
-        const { error: updateError } = await supabase
-          .from('anamneses')
-          // @ts-ignore - anamneses table not in types
-          .update(dataToSave)
-          .eq('id', anamnese.id);
-
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('anamneses')
-          // @ts-ignore - anamneses table not in types
-          .insert([dataToSave]);
-
-        if (insertError) throw insertError;
-      }
+      const response = await fetch('/api/admin/anamneses', {
+        method: anamnese ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dataToSave),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Erro ao salvar anamnese');
 
       onSave();
       onClose();

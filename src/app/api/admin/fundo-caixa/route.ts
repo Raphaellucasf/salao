@@ -2,99 +2,63 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { requireAdmin } from '@/lib/api-auth';
 
-const DEFAULT_UNIT_ID = '00000000-0000-0000-0000-000000000001';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// GET /api/admin/fundo-caixa  — saldo atual + últimas movimentações
-export async function GET(_req: NextRequest) {
-  const supabase = createServerSupabase();
+export async function GET(req: NextRequest) {
+  const authResult = await requireAdmin(req);
+  if (authResult instanceof NextResponse) return authResult;
 
-  const [{ data: fundo }, { data: movs }] = await Promise.all([
-    (supabase as any)
-      .from('fundo_caixa')
-      .select('*')
-      .eq('unit_id', DEFAULT_UNIT_ID)
-      .maybeSingle(),
-    (supabase as any)
-      .from('fundo_caixa_movimentacoes')
-      .select('*')
-      .eq('unit_id', DEFAULT_UNIT_ID)
-      .order('created_at', { ascending: false })
-      .limit(30),
+  const supabase = createServerSupabase(authResult.unitId);
+  const [fundResult, movementsResult] = await Promise.all([
+    supabase.from('fundo_caixa').select('valor').eq('unit_id', authResult.unitId).maybeSingle(),
+    supabase.from('fundo_caixa_movimentacoes').select('*').eq('unit_id', authResult.unitId)
+      .order('created_at', { ascending: false }).limit(30),
   ]);
-
-  return NextResponse.json({
-    saldo: fundo?.valor ?? 0,
-    movimentacoes: movs ?? [],
-  });
+  if (fundResult.error || movementsResult.error) {
+    return NextResponse.json({ error: 'Não foi possível carregar o fundo de caixa' }, { status: 500 });
+  }
+  return NextResponse.json({ saldo: fundResult.data?.valor ?? 0, movimentacoes: movementsResult.data ?? [] });
 }
 
-// POST /api/admin/fundo-caixa  — depositar ou retirar
 export async function POST(req: NextRequest) {
   const authResult = await requireAdmin(req);
   if (authResult instanceof NextResponse) return authResult;
 
   try {
     const body = await req.json();
-    const { tipo, valor, descricao, user_id } = body;
+    const amount = Number(body.valor);
+    const description = typeof body.descricao === 'string' ? body.descricao.trim() : '';
+    const requestId = typeof body.request_id === 'string' && UUID_PATTERN.test(body.request_id)
+      ? body.request_id
+      : crypto.randomUUID();
+    if (!['deposito', 'retirada'].includes(body.tipo) || !Number.isFinite(amount) || amount <= 0
+      || amount > 100_000_000 || !description || description.length > 500) {
+      return NextResponse.json({ error: 'Dados da movimentação inválidos' }, { status: 400 });
+    }
 
-    if (!tipo || !valor || !descricao) {
+    const supabase = createServerSupabase(authResult.unitId);
+    const { data, error } = await supabase.rpc('adjust_cash_fund_atomic', {
+      p_unit_id: authResult.unitId,
+      p_type: body.tipo,
+      p_amount: Math.round(amount * 100) / 100,
+      p_description: description,
+      p_actor_id: authResult.id,
+      p_request_id: requestId,
+    });
+    if (error) {
+      const insufficient = error.message === 'insufficient_fund_balance';
       return NextResponse.json(
-        { error: 'tipo, valor e descricao são obrigatórios' },
+        { error: insufficient ? 'Saldo insuficiente no fundo de caixa' : 'Não foi possível movimentar o fundo de caixa' },
         { status: 400 },
       );
     }
-    if (!['deposito', 'retirada'].includes(tipo)) {
-      return NextResponse.json({ error: 'tipo deve ser deposito ou retirada' }, { status: 400 });
-    }
-
-    const supabase = createServerSupabase();
-
-    // Busca saldo atual
-    const { data: fundo } = await (supabase as any)
-      .from('fundo_caixa')
-      .select('valor')
-      .eq('unit_id', DEFAULT_UNIT_ID)
-      .maybeSingle();
-
-    const saldoAtual = Number(fundo?.valor ?? 0);
-    const valorNum = Number(valor);
-    const novoSaldo = tipo === 'deposito' ? saldoAtual + valorNum : saldoAtual - valorNum;
-
-    if (novoSaldo < 0) {
-      return NextResponse.json(
-        { error: `Saldo insuficiente no fundo de caixa. Saldo atual: R$ ${saldoAtual.toFixed(2)}` },
-        { status: 400 },
-      );
-    }
-
-    // Atualiza saldo
-    const { error: errFundo } = await (supabase as any)
-      .from('fundo_caixa')
-      .upsert([{
-        unit_id: DEFAULT_UNIT_ID,
-        valor: novoSaldo,
-        updated_at: new Date().toISOString(),
-        updated_by: user_id ?? null,
-      }], { onConflict: 'unit_id' });
-
-    if (errFundo) return NextResponse.json({ error: errFundo.message }, { status: 500 });
-
-    // Registra movimentação
-    const { error: errMov } = await (supabase as any)
-      .from('fundo_caixa_movimentacoes')
-      .insert([{
-        unit_id: DEFAULT_UNIT_ID,
-        tipo,
-        valor: valorNum,
-        descricao,
-        saldo_apos: novoSaldo,
-        criado_por: user_id ?? null,
-      }]);
-
-    if (errMov) return NextResponse.json({ error: errMov.message }, { status: 500 });
-
-    return NextResponse.json({ ok: true, novo_saldo: novoSaldo });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Erro interno' }, { status: 500 });
+    const result = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    return NextResponse.json({
+      ok: true,
+      novo_saldo: 'balance' in result ? result.balance : null,
+      replayed: 'replayed' in result ? result.replayed : false,
+    });
+  } catch {
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }

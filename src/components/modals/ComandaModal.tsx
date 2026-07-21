@@ -8,8 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Plus, Trash2, ShoppingBag, Scissors, Package as PackageIcon, Gift, ClipboardList } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AtribuirEtapasServico from './AtribuirEtapasServico';
-import { verificarPacoteAtivo, debitarSessaoPacote, registrarCompraPacote, type PacoteAtivo } from '@/services/pacotes';
-import { DEFAULT_UNIT_ID } from '@/services/caixa';
+import { verificarPacoteAtivo, type PacoteAtivo } from '@/services/pacotes';
 
 interface ComandaItem {
   id?: string;
@@ -28,7 +27,7 @@ interface ComandaItem {
 interface ComandaModalProps {
   isOpen: boolean;
   onClose: () => void;
-  comandaId?: string;
+  comandaId?: number;
   onSave: () => void;
 }
 
@@ -62,7 +61,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
 
   // T-08: pacotes ativos do cliente selecionado
   const [pacotesAtivos, setPacotesAtivos] = useState<PacoteAtivo[]>([]);
-  const [pacotesDismissed, setPacotesDismissed] = useState<Set<string>>(new Set());
+  const [, setPacotesDismissed] = useState<Set<string>>(new Set());
 
   // Verifica pacotes sempre que o cliente mudar
   useEffect(() => {
@@ -80,7 +79,6 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       }
     }
     checarPacotes();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.cliente_id, clientes]);
 
   useEffect(() => {
@@ -135,7 +133,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       if (error) throw error;
 
       setFormData({
-        cliente_id: comanda.cliente_id || '',
+        cliente_id: comanda.cliente_id ? String(comanda.cliente_id) : '',
         profissional_id: comanda.profissional_id || '',
         auxiliar_id: comanda.auxiliar_id || '',
         data_agendamento: comanda.data_agendamento || '',
@@ -222,7 +220,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     if (!value) return;
 
     let item: any;
-    let tipo = novoItem.tipo;
+    const tipo = novoItem.tipo;
 
     if (tipo === 'produto') {
       item = produtos.find(p => p.id === value);
@@ -275,7 +273,7 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
           tem_etapas: item.tem_etapas || false,
           etapas: etapas,
           atribuicoes_etapas: [],
-          pacote_cliente_id: isPacote ? pacoteDisponivel.id : undefined,
+          pacote_cliente_id: isPacote ? pacoteDisponivel?.id : undefined,
         });
       }
     } else if (tipo === 'pacote') {
@@ -385,91 +383,6 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     return itens.reduce((sum, item) => sum + item.valor_total, 0);
   };
 
-  // Atualiza o estoque: delta = -1 para debitar (venda/uso), +1 para estornar (edição)
-  const movimentarEstoque = async (itemsComanda: ComandaItem[], delta: number) => {
-    const produtoItems = itemsComanda.filter(i => i.tipo === 'produto' && i.item_id);
-    if (produtoItems.length === 0) return;
-
-    // Agrupa por produto para somar quantidades
-    const agrupado: Record<string, number> = {};
-    for (const item of produtoItems) {
-      agrupado[item.item_id!] = (agrupado[item.item_id!] || 0) + item.quantidade;
-    }
-
-    for (const [produtoId, qtd] of Object.entries(agrupado)) {
-      const { data: prod } = await supabase
-        .from('produtos')
-        .select('quantidade')
-        .eq('id', produtoId)
-        .single();
-      if (prod !== null) {
-        const novaQtd = Math.max(0, (prod.quantidade || 0) + delta * qtd);
-        await supabase.from('produtos').update({ quantidade: novaQtd }).eq('id', produtoId);
-      }
-    }
-  };
-
-  // Task 6: consome insumos de uso_interno vinculados a serviços via servicos_produtos
-  // delta = -1 ao salvar, +1 ao estornar (edição de comanda existente)
-  const consumirInsumosServico = async (itemsComanda: ComandaItem[], delta: number) => {
-    const servicoItems = itemsComanda.filter(i => i.tipo === 'servico' && i.item_id);
-    if (servicoItems.length === 0) return;
-
-    // Coleta todos os servico_ids únicos
-    const servicoIds = [...new Set(servicoItems.map(i => i.item_id!))];
-
-    // Busca produtos vinculados a esses serviços
-    const { data: vinculos, error } = await supabase
-      .from('servicos_produtos')
-      .select('servico_id, produto_id, quantidade_media')
-      .in('servico_id', servicoIds);
-
-    if (error || !vinculos || vinculos.length === 0) return;
-
-    // Agrega: para cada produto, multiplica quantidade_media × QTD do serviço na comanda
-    const agrupado: Record<string, number> = {};
-    for (const item of servicoItems) {
-      const vinculosServico = vinculos.filter(v => v.servico_id === item.item_id);
-      for (const v of vinculosServico) {
-        const qtdConsumo = (v.quantidade_media || 0) * item.quantidade;
-        agrupado[v.produto_id] = (agrupado[v.produto_id] || 0) + qtdConsumo;
-      }
-    }
-
-    for (const [produtoId, qtd] of Object.entries(agrupado)) {
-      if (qtd <= 0) continue;
-
-      const { data: prod } = await supabase
-        .from('produtos')
-        .select('quantidade, tipo')
-        .eq('id', produtoId)
-        .single();
-
-      if (!prod) continue;
-
-      const qtdAnterior = prod.quantidade || 0;
-      const qtdNova = Math.max(0, qtdAnterior + delta * qtd);
-
-      await supabase.from('produtos').update({ quantidade: qtdNova }).eq('id', produtoId);
-
-      // Registra movimentação (tabela pode não existir em todos os envs)
-      if (delta < 0) {
-        try {
-          await supabase.from('estoque_movimentacoes').insert([{
-            produto_id: produtoId,
-            tipo: 'uso_interno',
-            quantidade: qtd,
-            quantidade_anterior: qtdAnterior,
-            quantidade_atual: qtdNova,
-            motivo: 'Consumo automático por serviço na comanda',
-          }]);
-        } catch {
-          // Ignora se tabela não existir
-        }
-      }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -480,7 +393,6 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
       setLoading(false);
       return;
     }
-
     if (!formData.cliente_id) {
       setError('Selecione um cliente para a comanda');
       setLoading(false);
@@ -488,233 +400,32 @@ export default function ComandaModal({ isOpen, onClose, comandaId, onSave }: Com
     }
 
     try {
-      const cliente = clientes.find(c => c.id === formData.cliente_id);
-      const total = calcularTotal();
-
-      if (comandaId) {
-        const { error: updateError } = await supabase
-          .from('comandas')
-          .update({
-            cliente_id: formData.cliente_id || null,
-            cliente_nome: cliente?.nome || null,
-            profissional_id: formData.profissional_id || null,
-            auxiliar_id: formData.auxiliar_id || null,
-            data_agendamento: formData.data_agendamento || null,
-            hora_inicio: formData.hora_inicio || null,
-            subtotal: total,
-            total,
-            observacoes: formData.observacoes,
-          })
-          .eq('id', comandaId);
-
-        if (updateError) throw updateError;
-
-        // Estornar estoque dos itens antigos antes de deletar
-        const { data: itensAntigos } = await supabase
-          .from('comanda_itens')
-          .select('tipo, item_id, quantidade')
-          .eq('comanda_id', comandaId);
-        await movimentarEstoque(itensAntigos || [], +1);
-        await consumirInsumosServico(itensAntigos || [], +1);
-
-        // Deletar itens antigos e suas etapas
-        await supabase.from('comanda_itens').delete().eq('comanda_id', comandaId);
-
-        // Inserir novos itens e capturar IDs
-        const { data: itensInseridos, error: itensError } = await supabase
-          .from('comanda_itens')
-          .insert(itens.map(item => {
-            const { id, tem_etapas, etapas, atribuicoes_etapas, pacote_cliente_id, ...itemData } = item;
-            return {
-              comanda_id: comandaId,
-              ...itemData,
-              item_id: itemData.item_id ? String(itemData.item_id) : null,
-            };
-          }))
-          .select();
-
-        if (itensError) throw itensError;
-
-        // Inserir atribuições de etapas
-        const etapasParaInserir: any[] = [];
-        itens.forEach((item, index) => {
-          if (item.tem_etapas && item.atribuicoes_etapas && item.atribuicoes_etapas.length > 0) {
-            const comandaItemId = itensInseridos?.[index]?.id;
-            if (comandaItemId) {
-              item.atribuicoes_etapas.forEach((atrib: any) => {
-                etapasParaInserir.push({
-                  comanda_item_id: comandaItemId,
-                  servico_etapa_id: atrib.servico_etapa_id,
-                  ordem: atrib.ordem,
-                  nome: atrib.nome,
-                  duracao_minutos: atrib.duracao_minutos,
-                  profissional_id: atrib.profissional_id || null,
-                  auxiliar_id: atrib.auxiliar_id || null,
-                });
-              });
-            }
-          }
-        });
-
-        if (etapasParaInserir.length > 0) {
-          const { error: etapasError } = await supabase
-            .from('comanda_item_etapas')
-            .insert(etapasParaInserir);
-          if (etapasError) throw etapasError;
-        }
-
-        // Debitar estoque dos novos itens produto e consumir insumos dos serviços
-        await movimentarEstoque(itens, -1);
-        await consumirInsumosServico(itens, -1);
-
-        // Debitar sessões de pacotes usadas nesta edição
-        const itensPacoteUsoUp = itens.filter(i => i.pacote_cliente_id);
-        for (const item of itensPacoteUsoUp) {
-          try { await debitarSessaoPacote(item.pacote_cliente_id!); } catch (e) { console.error('Erro ao debitar sessão de pacote:', e); }
-        }
-
-        // Sincroniza servicos + cliente no agendamento vinculado
-        const servicosJsonUp = itens
-          .filter(i => i.tipo === 'servico' && i.item_id)
-          .map(i => {
-            const svc = servicos.find(s => s.id === i.item_id);
-            return { id: i.item_id, nome: i.descricao, valor: i.valor_unitario, duracao: svc?.duracao_minutos || 0, quantidade: i.quantidade };
-          });
-        await supabase.from('agendamentos').update({
-          servicos: servicosJsonUp,
-          cliente_nome: cliente?.nome || null,
-          cliente_telefone: (cliente as any)?.telefone || null,
-        }).eq('comanda_id', comandaId);
-      } else {
-        // Validar conflito de horário antes de criar
-        if (formData.profissional_id && formData.data_agendamento && formData.hora_inicio) {
-          const duracaoItems = itens
-            .filter(i => i.tipo === 'servico' && i.item_id)
-            .reduce((s, i) => {
-              const svc = servicos.find(sv => sv.id === i.item_id);
-              return s + (svc?.duracao_minutos || 0) * (i.quantidade || 1);
-            }, 0) || 60;
-          const [h, m] = formData.hora_inicio.split(':').map(Number);
-          const fimMin = h * 60 + m + duracaoItems;
-          const horaFimConflito = `${String(Math.floor(fimMin / 60)).padStart(2, '0')}:${String(fimMin % 60).padStart(2, '0')}:00`;
-          const horaInicioConflito = formData.hora_inicio + ':00';
-          const { data: overlap } = await supabase
-            .from('agendamentos')
-            .select('id, hora_inicio, hora_fim, cliente_nome')
-            .eq('profissional_id', formData.profissional_id)
-            .eq('data_agendamento', formData.data_agendamento)
-            .neq('status', 'cancelado')
-            .lt('hora_inicio', horaFimConflito)
-            .gt('hora_fim', horaInicioConflito);
-          if (overlap && overlap.length > 0) {
-            const h0 = (overlap[0] as any).hora_inicio?.substring(0, 5) || '';
-            const confirmMsg = `Conflito de horário: o profissional já possui atendimento às ${h0}.\nDeseja agendar neste horário mesmo assim?`;
-            if (!confirm(confirmMsg)) {
-              return; // Cancela a operação se o usuário não confirmar
-            }
-          }
-        }
-
-        // Criar nova comanda
-        const { data: novaComanda, error: insertError } = await supabase
-          .from('comandas')
-          .insert([{
-            numero_comanda: 0, // Será atualizado por trigger
-            cliente_id: formData.cliente_id || null,
-            cliente_nome: cliente?.nome || null,
-            profissional_id: formData.profissional_id || null,
-            auxiliar_id: formData.auxiliar_id || null,
-            data_agendamento: formData.data_agendamento || null,
-            hora_inicio: formData.hora_inicio || null,
-            status: 'aberta',
-            subtotal: total,
-            total,
-            observacoes: formData.observacoes,
-          }])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        // Inserir itens e capturar IDs
-        const { data: itensInseridos, error: itensError } = await supabase
-          .from('comanda_itens')
-          .insert(itens.map(item => {
-            const { id, tem_etapas, etapas, atribuicoes_etapas, pacote_cliente_id, ...itemData } = item;
-            return {
-              comanda_id: novaComanda.id,
-              ...itemData,
-              item_id: itemData.item_id ? String(itemData.item_id) : null,
-            };
-          }))
-          .select();
-
-        if (itensError) throw itensError;
-
-        // Inserir atribuições de etapas
-        const etapasParaInserir: any[] = [];
-        itens.forEach((item, index) => {
-          if (item.tem_etapas && item.atribuicoes_etapas && item.atribuicoes_etapas.length > 0) {
-            const comandaItemId = itensInseridos?.[index]?.id;
-            if (comandaItemId) {
-              item.atribuicoes_etapas.forEach((atrib: any) => {
-                etapasParaInserir.push({
-                  comanda_item_id: comandaItemId,
-                  servico_etapa_id: atrib.servico_etapa_id,
-                  ordem: atrib.ordem,
-                  nome: atrib.nome,
-                  duracao_minutos: atrib.duracao_minutos,
-                  profissional_id: atrib.profissional_id || null,
-                  auxiliar_id: atrib.auxiliar_id || null,
-                });
-              });
-            }
-          }
-        });
-
-        if (etapasParaInserir.length > 0) {
-          const { error: etapasError } = await supabase
-            .from('comanda_item_etapas')
-            .insert(etapasParaInserir);
-          if (etapasError) throw etapasError;
-        }
-
-        // Debitar estoque dos itens produto na criação e insumos dos serviços
-        await movimentarEstoque(itens, -1);
-        await consumirInsumosServico(itens, -1);
-
-        // Debitar sessões de pacotes usadas nesta comanda (compra de pacote é registrada só ao fechar)
-        const itensPacoteUso = itens.filter(i => i.pacote_cliente_id);
-        console.log('[ComandaModal] itensPacoteUso para débito:', itensPacoteUso.map(i => ({ descricao: i.descricao, pacote_cliente_id: i.pacote_cliente_id })));
-        for (const item of itensPacoteUso) {
-          try {
-            const ok = await debitarSessaoPacote(item.pacote_cliente_id!);
-            console.log('[ComandaModal] debitarSessaoPacote resultado:', { pacote_cliente_id: item.pacote_cliente_id, ok });
-          } catch (e) { console.error('[ComandaModal] Erro ao debitar sessão de pacote:', e); }
-        }
-
-        // Sincroniza servicos + cliente no agendamento criado pelo trigger
-        // (trigger dispara no INSERT, antes dos itens — precisa de update posterior)
-        const servicosJson = itens
-          .filter(i => i.tipo === 'servico' && i.item_id)
-          .map(i => {
-            const svc = servicos.find(s => s.id === i.item_id);
-            return { id: i.item_id, nome: i.descricao, valor: i.valor_unitario, duracao: svc?.duracao_minutos || 0, quantidade: i.quantidade };
-          });
-        await supabase
-          .from('agendamentos')
-          .update({
-            servicos: servicosJson,
-            cliente_nome: cliente?.nome || null,
-            cliente_telefone: (cliente as any)?.telefone || null,
-          })
-          .eq('comanda_id', novaComanda.id);
-      }
-
+      const response = await fetch('/api/admin/comandas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comanda_id: comandaId ?? null,
+          cliente_id: formData.cliente_id,
+          profissional_id: formData.profissional_id || null,
+          auxiliar_id: formData.auxiliar_id || null,
+          data_agendamento: formData.data_agendamento || null,
+          hora_inicio: formData.hora_inicio || null,
+          observacoes: formData.observacoes,
+          itens: itens.map((item) => ({
+            tipo: item.tipo,
+            item_id: item.item_id,
+            quantidade: item.quantidade,
+            pacote_cliente_id: item.pacote_cliente_id ?? null,
+            atribuicoes_etapas: item.atribuicoes_etapas ?? [],
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
       onSave();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar comanda');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Erro ao salvar comanda');
     } finally {
       setLoading(false);
     }

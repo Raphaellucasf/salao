@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,7 +5,6 @@ import { useFormCache } from '@/hooks/useFormCache';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { supabase } from '@/lib/supabase';
 import { X as XIcon } from 'lucide-react';
 
@@ -173,7 +171,9 @@ export default function ProfissionalModal({ isOpen, onClose, profissional, onSav
                 setFormData(prev => ({
                   ...prev,
                   apelido: fresh.apelido ? fresh.apelido.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
-                  grupos: Array.isArray(fresh.grupos) ? fresh.grupos : (fresh.grupos || []),
+                  grupos: Array.isArray(fresh.grupos)
+                    ? fresh.grupos.filter((grupo): grupo is string => typeof grupo === 'string')
+                    : [],
                 }));
               }
             });

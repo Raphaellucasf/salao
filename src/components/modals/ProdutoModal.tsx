@@ -5,7 +5,6 @@ import { useFormCache } from '@/hooks/useFormCache';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { supabase } from '@/lib/supabase';
 import { Package, DollarSign, Archive, Settings } from 'lucide-react';
 
@@ -171,19 +170,18 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave, default
         fornecedor_id: formData.fornecedor_id || null,
       };
 
-      if (produto?.id) {
-        const { error: updateError } = await supabase
-          .from('produtos')
-          .update(dataToSave as any)
-          .eq('id', produto.id);
-
-        if (updateError) throw updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('produtos')
-          .insert([{ ...dataToSave as any, id: crypto.randomUUID() }]);
-
-        if (insertError) throw insertError;
+      const response = await fetch('/api/admin/produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...dataToSave,
+          id: produto?.id ?? null,
+          request_id: crypto.randomUUID(),
+        }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'Erro ao salvar produto');
       }
 
       onSave();
@@ -202,7 +200,7 @@ export default function ProdutoModal({ isOpen, onClose, produto, onSave, default
       isOpen={isOpen}
       onClose={onClose}
       title={produto ? 'Editar Produto' : 'Novo Produto'}
-      size="large"
+      size="lg"
     >
       <form onSubmit={handleSubmit}>
         {error && (

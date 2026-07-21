@@ -56,7 +56,7 @@ O sistema de autenticação com controle de acesso baseado em roles (RBAC) está
 4. Atualize:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=sua_url_aqui
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_aqui
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 ---

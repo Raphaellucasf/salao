@@ -1,50 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { requireAdmin } from '@/lib/api-auth';
+import { apiError } from '@/lib/api-response';
+import { getRequestId } from '@/lib/observability';
+import { asBoundedText, asMoney, isIsoDate, parseJsonObject } from '@/lib/validation';
+import { createTransaction, listTransactions } from '@/services/transactions';
 
-// GET /api/admin/transacoes?dataInicio=2026-04-01&dataFim=2026-04-30
-export async function GET(req: NextRequest) {
-  const dataInicio = req.nextUrl.searchParams.get('dataInicio');
-  const dataFim    = req.nextUrl.searchParams.get('dataFim');
-  if (!dataInicio) {
-    return NextResponse.json({ error: 'dataInicio obrigatório' }, { status: 400 });
+const METHODS = new Set(['dinheiro', 'pix', 'cartao_credito', 'cartao_debito', 'Dinheiro', 'Pix', 'Crédito', 'Débito']);
+
+export async function GET(request: NextRequest) {
+  const requestId = getRequestId(request);
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
+  const startDate = request.nextUrl.searchParams.get('dataInicio');
+  const endDate = request.nextUrl.searchParams.get('dataFim');
+  if (!startDate || !isIsoDate(startDate) || (endDate && !isIsoDate(endDate))) {
+    return apiError('INVALID_INPUT', 'Intervalo de datas inválido', 400, requestId);
   }
-
-  const supabase = createServerSupabase();
-  let query = (supabase as any)
-    .from('transacoes')
-    .select('*')
-    .gte('data', dataInicio);
-
-  if (dataFim) query = query.lte('data', dataFim);
-
-  const { data, error } = await query.order('data', { ascending: false });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json(data ?? []);
+  const result = await listTransactions(
+    { adminId: auth.id, unitId: auth.unitId, requestId, route: '/api/admin/transacoes' },
+    { startDate, endDate },
+  );
+  if (!result.ok) return apiError(result.code, result.message, result.status, requestId);
+  return NextResponse.json(result.data);
 }
 
-// POST /api/admin/transacoes — inserir transação manual (despesa, etc.)
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
   try {
-    const body = await req.json();
-    const { tipo, descricao, categoria, valor, metodo, data } = body;
-
-    if (!tipo || !descricao || !valor || !data) {
-      return NextResponse.json({ error: 'tipo, descricao, valor e data são obrigatórios' }, { status: 400 });
+    const body = await parseJsonObject(request);
+    const type = body.tipo;
+    const description = asBoundedText(body.descricao, 500);
+    const amount = asMoney(body.valor);
+    const date = body.data;
+    const method = asBoundedText(body.metodo, 40) ?? 'dinheiro';
+    if ((type !== 'receita' && type !== 'despesa') || !description || !amount || !isIsoDate(date) || !METHODS.has(method)) {
+      return apiError('INVALID_INPUT', 'Dados da transação inválidos', 400, requestId);
     }
-
-    const supabase = createServerSupabase();
-    const { data: inserted, error } = await (supabase as any)
-      .from('transacoes')
-      .insert([{ tipo, descricao, categoria: categoria ?? '', valor, metodo: metodo ?? 'dinheiro', data }])
-      .select()
-      .single();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    return NextResponse.json(inserted);
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Erro interno' }, { status: 500 });
+    const result = await createTransaction(
+      { adminId: auth.id, unitId: auth.unitId, requestId, route: '/api/admin/transacoes' },
+      {
+        tipo: type,
+        descricao: description,
+        categoria: asBoundedText(body.categoria, 100) ?? '',
+        valor: amount,
+        metodo: method,
+        data: date,
+      },
+    );
+    if (!result.ok) return apiError(result.code, result.message, result.status, requestId);
+    return NextResponse.json(result.data);
+  } catch {
+    return apiError('INVALID_INPUT', 'Payload da transação inválido', 400, requestId);
   }
 }

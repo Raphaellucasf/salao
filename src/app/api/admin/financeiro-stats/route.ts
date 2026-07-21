@@ -1,38 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { requireAdmin } from '@/lib/api-auth';
+import { getCachedFinancialStats } from '@/lib/financial-stats-cache';
 
-// GET /api/admin/financeiro-stats?hoje=2026-04-13&inicioMes=2026-04-01
+function validDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 export async function GET(req: NextRequest) {
-  const hoje = req.nextUrl.searchParams.get('hoje');
-  const inicioMes = req.nextUrl.searchParams.get('inicioMes');
+  const auth = await requireAdmin(req);
+  if (auth instanceof NextResponse) return auth;
+  const today = req.nextUrl.searchParams.get('hoje');
+  const monthStart = req.nextUrl.searchParams.get('inicioMes');
+  if (!today || !monthStart || !validDate(today) || !validDate(monthStart) || monthStart > today)
+    return NextResponse.json({ error: 'Intervalo de datas inválido' }, { status: 400 });
 
-  if (!hoje || !inicioMes) {
-    return NextResponse.json({ error: 'hoje e inicioMes são obrigatórios' }, { status: 400 });
+  try {
+    const data = await getCachedFinancialStats(auth.unitId, monthStart, today);
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': 'private, no-store' },
+    });
+  } catch {
+    return NextResponse.json({ error: 'Não foi possível calcular o resumo financeiro' }, { status: 500 });
   }
-
-  const supabase = createServerSupabase();
-
-  const [{ data: hojeRows, error: e1 }, { data: mesRows, error: e2 }] = await Promise.all([
-    (supabase as any)
-      .from('transacoes')
-      .select('valor')
-      .eq('tipo', 'receita')
-      .eq('data', hoje),
-    (supabase as any)
-      .from('transacoes')
-      .select('valor')
-      .eq('tipo', 'receita')
-      .gte('data', inicioMes),
-  ]);
-
-  if (e1 || e2) {
-    return NextResponse.json({ error: e1?.message || e2?.message }, { status: 500 });
-  }
-
-  const faturamentoHoje = ((hojeRows ?? []) as { valor: number }[])
-    .reduce((s, t) => s + Number(t.valor), 0);
-  const faturamentoMes = ((mesRows ?? []) as { valor: number }[])
-    .reduce((s, t) => s + Number(t.valor), 0);
-
-  return NextResponse.json({ faturamentoHoje, faturamentoMes });
 }

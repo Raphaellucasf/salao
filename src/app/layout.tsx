@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Otimiza Beauty Manager - Agendamento Online",
-  description: "Sistema completo de gestão e agendamento para salões de beleza",
+  title: {
+    default: "Dimas Dona Concept",
+    template: "%s | Dimas Dona Concept",
+  },
+  description: "Agendamento online e gestão do Dimas Dona Concept.",
 };
 
 export default function RootLayout({
@@ -25,9 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-neutral-50`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
           {children}
         </AuthProvider>

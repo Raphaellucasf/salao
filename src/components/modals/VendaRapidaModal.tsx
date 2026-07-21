@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Modal from '@/components/ui/Modal';
-import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
-import { ShoppingBag, Plus, Trash2, User, Search, DollarSign } from 'lucide-react';
+import { Plus, Trash2, User, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface VendaRapidaModalProps {
@@ -25,6 +24,7 @@ interface ItemSelecionado {
 
 export default function VendaRapidaModal({ isOpen, onClose }: VendaRapidaModalProps) {
   const [loading, setLoading] = useState(false);
+  const saleRequestIdRef = useRef<string | null>(null);
   
   // Cliente (opcional)
   const [clienteBusca, setClienteBusca] = useState('');
@@ -89,6 +89,7 @@ export default function VendaRapidaModal({ isOpen, onClose }: VendaRapidaModalPr
     setAddItemId('');
     setAddItemQtd(1);
     setMetodoPagamento('dinheiro');
+    saleRequestIdRef.current = null;
   };
 
   const handleClose = () => {
@@ -138,82 +139,26 @@ export default function VendaRapidaModal({ isOpen, onClose }: VendaRapidaModalPr
 
     setLoading(true);
     try {
-      // 1. Criar comanda fechada
-      const { data: comandaNova, error: comandaErr } = await supabase
-        .from('comandas')
-        .insert({
-          cliente_id: clienteSelecionado?.id || null,
-          cliente_nome: clienteSelecionado?.nome || 'Cliente Balcão',
-          status: 'fechada',
-          subtotal: total,
-          desconto: 0,
-          total: total,
-          data_fechamento: new Date().toISOString()
-        })
-        .select()
-        .single();
-      
-      if (comandaErr) throw comandaErr;
-
-      // 2. Inserir itens
-      const comandaItensData = itens.map(item => ({
-        comanda_id: comandaNova.id,
-        tipo: item.tipo,
-        item_id: item.item_id,
-        descricao: item.descricao,
-        quantidade: item.quantidade,
-        valor_unitario: item.valor_unitario,
-        valor_total: item.valor_total
-      }));
-
-      const { error: itensErr } = await supabase.from('comanda_itens').insert(comandaItensData);
-      if (itensErr) throw itensErr;
-
-      // 3. Registrar transação
-      const { data: fechamento } = await supabase
-        .from('fechamentos_caixa')
-        .select('id')
-        .eq('status', 'aberto')
-        .single();
-
-      if (fechamento) {
-         await supabase.from('transacoes').insert({
-          tipo: 'receita',
-          valor: total,
-          descricao: `Venda Rápida #${comandaNova.numero_comanda || comandaNova.id}`,
+      saleRequestIdRef.current ??= crypto.randomUUID();
+      const response = await fetch('/api/admin/venda-rapida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_id: saleRequestIdRef.current,
+          cliente_id: clienteSelecionado?.id ?? null,
           metodo_pagamento: metodoPagamento,
-          data_transacao: new Date().toISOString(),
-          fechamento_id: fechamento.id,
-          comanda_id: comandaNova.id
-        });
-      }
-
-      // 4. Movimentar estoque para produtos (em try/catch isolado — não bloqueia a venda)
-      try {
-        const produtosParaEstoque = itens.filter(i => i.tipo === 'produto');
-        for (const prod of produtosParaEstoque) {
-          const { data: currentProd } = await supabase.from('produtos').select('quantidade').eq('id', prod.item_id).single();
-          if (currentProd) {
-            const qtdAnterior = currentProd.quantidade || 0;
-            await supabase.from('estoque_movimentacoes').insert({
-              produto_id: prod.item_id,
-              tipo: 'venda',
-              quantidade: prod.quantidade,
-              quantidade_anterior: qtdAnterior,
-              quantidade_atual: qtdAnterior - prod.quantidade,
-              valor_unitario: prod.valor_unitario,
-              valor_total: prod.valor_total,
-              motivo: `Venda Rápida #${comandaNova.numero_comanda || comandaNova.id}`
-            });
-            // Update product qty
-            await supabase.from('produtos').update({ quantidade: qtdAnterior - prod.quantidade }).eq('id', prod.item_id);
-          }
-        }
-      } catch (estoqueErr) {
-        console.warn('[VendaRapida] Estoque não movimentado (tabela pode não existir):', estoqueErr);
-      }
+          itens: itens.map((item) => ({
+            tipo: item.tipo,
+            item_id: item.item_id,
+            quantidade: item.quantidade,
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
 
       toast.success('Venda rápida realizada com sucesso!');
+      saleRequestIdRef.current = null;
       handleClose();
     } catch (err: any) {
       console.error(err);

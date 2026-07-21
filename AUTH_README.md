@@ -17,7 +17,7 @@ npm run dev
 # 3. Acesse e faça login
 # http://localhost:3000/login
 # Email: dimas@salaodimas.com
-# Senha: Dimas@2024
+# Senha: variável local E2E_ADMIN_PASSWORD
 ```
 
 ---
@@ -46,19 +46,19 @@ npm run dev
 
 ## 👥 Usuários de Teste
 
-Criados automaticamente pelo script `database/seed_users.sql`:
+Contas de teste devem ser criadas explicitamente no ambiente autorizado, nunca por seed legado:
 
 ### 🔴 Admin
 ```
 Email: dimas@salaodimas.com
-Senha: Dimas@2024
+Senha: variável local `E2E_ADMIN_PASSWORD`
 Acesso: TOTAL (vê todos os menus)
 ```
 
 ### 🟡 Profissional 1
 ```
 Email: joao@salaodimas.com
-Senha: Joao@2024
+Senha: variável local `E2E_PROFESSIONAL_PASSWORD`
 Acesso: LIMITADO (sem financeiro)
 ```
 
@@ -133,13 +133,13 @@ src/
 
 ### Teste 1: Login Admin
 1. Acesse http://localhost:3000/login
-2. Login: `dimas@salaodimas.com` / `Dimas@2024`
+2. Login: `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`
 3. ✅ Deve redirecionar para `/admin`
 4. ✅ Sidebar deve mostrar 7 menus (incluindo Financeiro)
 
 ### Teste 2: Login Profissional
 1. Logout
-2. Login: `joao@salaodimas.com` / `Joao@2024`
+2. Login: `E2E_PROFESSIONAL_EMAIL` / `E2E_PROFESSIONAL_PASSWORD`
 3. ✅ Deve redirecionar para `/profissionais`
 4. ✅ Sidebar deve mostrar apenas 3 menus (SEM Financeiro)
 
@@ -160,16 +160,14 @@ src/
 ### Passo 2: Executar SQL
 No SQL Editor, execute nesta ordem:
 ```sql
-1. database/schema.sql
-2. database/migration_auth.sql
-3. database/seed_users.sql
+Consulte supabase/README.md e use apenas supabase/migrations/.
 ```
 
 ### Passo 3: Configurar Variáveis
 Edite `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 ---
@@ -187,7 +185,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key
 ## 🐛 Troubleshooting
 
 ### "Invalid login credentials"
-→ Execute `database/seed_users.sql` novamente
+→ Verifique a conta descartável no Auth do projeto de teste; não execute seeds legados
 
 ### Profissional vê menus de admin
 → Execute:

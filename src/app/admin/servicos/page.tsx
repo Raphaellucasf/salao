@@ -49,7 +49,18 @@ export default function ServicosPage() {
         .order('nome', { ascending: true });
 
       if (error) throw error;
-      setServicos(data || []);
+      setServicos((data || []).map((servico) => ({
+        id: servico.id,
+        nome: servico.nome,
+        descricao: servico.descricao ?? undefined,
+        categoria: servico.categoria ?? 'Sem categoria',
+        duracao: servico.duracao_minutos,
+        preco: servico.preco,
+        comissao: servico.comissao_profissional ?? 0,
+        ativo: servico.ativo ?? false,
+        observacoes: servico.observacoes ?? undefined,
+        created_at: servico.created_at ?? '',
+      })));
     } catch (error) {
       console.error('Erro ao carregar serviços:', error);
       setServicos([]);
@@ -72,12 +83,9 @@ export default function ServicosPage() {
     if (!confirm('Deseja excluir este serviço? Esta ação não pode ser desfeita!')) return;
 
     try {
-      const { error } = await supabase
-        .from('servicos')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      const response = await fetch(`/api/admin/servicos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Erro ao excluir serviço');
       alert('Serviço excluído com sucesso!');
       loadServicos();
     } catch (error: any) {
@@ -88,13 +96,11 @@ export default function ServicosPage() {
 
   const toggleAtivo = async (servico: Servico) => {
     try {
-      const { error } = await supabase
-        .from('servicos')
-        // @ts-ignore - servicos table not in types
-        .update({ ativo: !servico.ativo })
-        .eq('id', servico.id);
-
-      if (error) throw error;
+      const response = await fetch('/api/admin/servicos', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: servico.id, ativo: !servico.ativo }),
+      });
+      if (!response.ok) throw new Error('Erro ao atualizar status');
       loadServicos();
     } catch (error) {
       console.error('Erro ao atualizar:', error);

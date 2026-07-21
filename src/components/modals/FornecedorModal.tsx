@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -140,7 +139,7 @@ export default function FornecedorModal({ isOpen, onClose, fornecedor, onSave }:
       isOpen={isOpen}
       onClose={onClose}
       title={fornecedor ? 'Editar Fornecedor' : 'Novo Fornecedor'}
-      size="large"
+      size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (

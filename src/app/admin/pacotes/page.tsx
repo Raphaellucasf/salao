@@ -44,15 +44,20 @@ export default function PacotesPage() {
     if (!confirm('Desativar este pacote?')) return;
 
     try {
-      const { error } = await (supabase as any)
-        .from('pacotes_servicos')
-        .update({ ativo: false })
-        .eq('id', id);
-
-      if (error) throw error;
-      loadPacotes();
-    } catch (error: any) {
-      alert('Erro ao desativar pacote: ' + error.message);
+      const response = await fetch('/api/admin/pacotes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ativo: false }),
+      });
+      const result: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = typeof result === 'object' && result !== null && 'error' in result && typeof result.error === 'string'
+          ? result.error : 'Erro ao desativar pacote';
+        throw new Error(message);
+      }
+      await loadPacotes();
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : 'Erro ao desativar pacote');
     }
   };
 

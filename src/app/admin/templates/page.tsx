@@ -42,7 +42,18 @@ export default function TemplatesPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTemplates(data || []);
+      setTemplates((data || []).map((template) => ({
+        id: template.id,
+        tipo: template.tipo,
+        nome_template: template.nome_template,
+        descricao: template.descricao ?? undefined,
+        campos_padrao: Array.isArray(template.campos_padrao) ? template.campos_padrao : [],
+        campos_obrigatorios: Array.isArray(template.campos_obrigatorios)
+          ? template.campos_obrigatorios.filter((field): field is string => typeof field === 'string')
+          : [],
+        ativo: template.ativo ?? false,
+        created_at: template.created_at ?? '',
+      })));
     } catch (error) {
       console.error('Erro ao carregar templates:', error);
       setTemplates([]);
@@ -65,7 +76,6 @@ export default function TemplatesPage() {
     try {
       const { error } = await supabase
         .from('cadastro_templates')
-        // @ts-ignore - cadastro_templates table not in types
         .insert({
           tipo: template.tipo,
           nome_template: `${template.nome_template} (Cópia)`,
@@ -106,7 +116,6 @@ export default function TemplatesPage() {
     try {
       const { error } = await supabase
         .from('cadastro_templates')
-        // @ts-ignore - cadastro_templates table not in types
         .update({ ativo: !template.ativo })
         .eq('id', template.id);
 

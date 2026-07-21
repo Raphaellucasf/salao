@@ -1,6 +1,3 @@
-// Placeholder fixo para unit_id (tabela units não existe em produção)
-export const DEFAULT_UNIT_ID = '00000000-0000-0000-0000-000000000001';
-
 export interface ComandaResumo {
   id: number;
   numero_comanda: number;
