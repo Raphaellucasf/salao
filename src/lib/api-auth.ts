@@ -11,6 +11,14 @@ export interface AdminContext {
   unitId: string;
 }
 
+function isMissingTenantSchema(error: { code?: string; message?: string } | null): boolean {
+  return Boolean(error && (
+    error.code === 'PGRST205'
+    || error.code === '42P01'
+    || error.message?.includes('user_units')
+  ));
+}
+
 /**
  * Autentica a sessão e resolve papel/unidade exclusivamente das tabelas
  * canônicas. Falha fechado e registra apenas metadados permitidos.
@@ -58,6 +66,19 @@ export async function requireAdmin(req: NextRequest): Promise<AdminContext | Nex
       .eq('is_active', true)
       .eq('is_default', true)
       .maybeSingle();
+
+    if (membershipError && isMissingTenantSchema(membershipError)) {
+      logSecurityEvent({
+        event: 'auth.tenant_schema_missing', route, status: 503, requestId,
+        ...toErrorDetails(membershipError),
+      });
+      return apiError(
+        'SUPABASE_SYNC_REQUIRED',
+        'Ambiente Supabase desatualizado — aplique as migrações de unidades antes de usar a agenda e as comandas',
+        503,
+        requestId,
+      );
+    }
 
     if (membershipError || !membership) {
       logSecurityEvent({

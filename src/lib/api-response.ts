@@ -7,6 +7,7 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'INTEGRATION_UNAVAILABLE'
+  | 'SUPABASE_SYNC_REQUIRED'
   | 'RATE_LIMITED'
   | 'INTERNAL_ERROR';
 
