@@ -13,7 +13,13 @@ type AgendaResult = Database['public']['Views']['vw_agendamentos_completos']['Ro
 
 function serviceText(value: Json | null): string {
   if (!value) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    try {
+      return serviceText(JSON.parse(value) as Json);
+    } catch {
+      return value;
+    }
+  }
   if (Array.isArray(value)) return value.map(serviceText).filter(Boolean).join(', ');
   if (typeof value === 'object') {
     const name = value.nome;
