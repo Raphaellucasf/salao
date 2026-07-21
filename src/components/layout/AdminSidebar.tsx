@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Calendar, Users, DollarSign, Package, 
-  Menu, Bell, LogOut, Settings, Home,
+  LogOut, Settings, Home,
   BarChart3, Receipt, Scissors, ShoppingBag, Shield
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,7 +16,7 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
-export default function AdminSidebar({ isOpen, onToggle }: SidebarProps) {
+export default function AdminSidebar({ isOpen }: SidebarProps) {
   const { user, role, signOut, isAdmin } = useAuth();
   const pathname = usePathname();
   const { count: pendentesCount } = useCadastrosPendentes();

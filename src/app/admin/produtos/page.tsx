@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { 
-  Package, Plus, Search, Filter, TrendingUp, TrendingDown, 
+  Package, Plus, Search, TrendingUp,
   AlertTriangle, Archive, Edit2, Trash2, BarChart3, FileText 
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import ProdutoModal from '@/components/modals/ProdutoModal';
 import GrupoProdutoModal from '@/components/modals/GrupoProdutoModal';
@@ -102,11 +101,18 @@ function ProdutosPage() {
     }
   };
 
-  const handleDelete = async (type: 'produto' | 'grupo' | 'fornecedor', id: number) => {
+  const handleDelete = async (type: 'produto' | 'grupo' | 'fornecedor', id: string) => {
     if (!confirm('Tem certeza que deseja excluir?')) return;
 
     try {
-      const table = type === 'produto' ? 'produtos' : type === 'grupo' ? 'grupos_produtos' : 'fornecedores';
+      if (type === 'produto') {
+        const response = await fetch(`/api/admin/produtos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Erro ao excluir produto');
+        loadData();
+        return;
+      }
+      const table = type === 'grupo' ? 'grupos_produtos' : 'fornecedores';
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
       loadData();

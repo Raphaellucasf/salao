@@ -2,18 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { requireAdmin } from '@/lib/api-auth';
 
-const DEFAULT_UNIT_ID = '00000000-0000-0000-0000-000000000001';
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 // GET /api/admin/abertura-caixa?data=2026-04-27
 export async function GET(req: NextRequest) {
-  const data = req.nextUrl.searchParams.get('data');
-  if (!data) return NextResponse.json({ error: 'data obrigatória' }, { status: 400 });
+  const authResult = await requireAdmin(req);
+  if (authResult instanceof NextResponse) return authResult;
 
-  const supabase = createServerSupabase();
-  const { data: abertura, error } = await (supabase as any)
+  const data = req.nextUrl.searchParams.get('data');
+  if (!data || !DATE_PATTERN.test(data) || Number.isNaN(Date.parse(`${data}T00:00:00Z`))) {
+    return NextResponse.json({ error: 'data inválida' }, { status: 400 });
+  }
+
+  const supabase = createServerSupabase(authResult.unitId);
+  const { data: abertura, error } = await supabase
     .from('abertura_caixa')
     .select('*')
-    .eq('unit_id', DEFAULT_UNIT_ID)
+    .eq('unit_id', authResult.unitId)
     .eq('data', data)
     .maybeSingle();
 
@@ -28,28 +33,30 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { data, valor_abertura, observacao, aberto_por } = body;
+    const { data, valor_abertura, observacao } = body;
+    const valor = Number(valor_abertura);
 
-    if (!data || valor_abertura === undefined) {
-      return NextResponse.json({ error: 'data e valor_abertura são obrigatórios' }, { status: 400 });
+    if (!data || !DATE_PATTERN.test(data) || Number.isNaN(Date.parse(`${data}T00:00:00Z`))
+      || !Number.isFinite(valor) || valor < 0 || valor > 1_000_000) {
+      return NextResponse.json({ error: 'Dados de abertura inválidos' }, { status: 400 });
     }
 
-    const supabase = createServerSupabase();
-    const { data: result, error } = await (supabase as any)
+    const supabase = createServerSupabase(authResult.unitId);
+    const { data: result, error } = await supabase
       .from('abertura_caixa')
       .upsert([{
-        unit_id: DEFAULT_UNIT_ID,
+        unit_id: authResult.unitId,
         data,
-        valor_abertura: Number(valor_abertura),
-        observacao: observacao ?? null,
-        aberto_por: aberto_por ?? null,
+        valor_abertura: Math.round(valor * 100) / 100,
+        observacao: typeof observacao === 'string' ? observacao.trim().slice(0, 1000) || null : null,
+        aberto_por: authResult.id,
       }], { onConflict: 'unit_id,data' })
       .select()
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Erro interno' }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,7 +5,8 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
-import { FileText, Plus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
+import type { Database, Json } from '@/types/supabase';
 
 interface TemplateModalProps {
   isOpen: boolean;
@@ -16,6 +16,7 @@ interface TemplateModalProps {
 }
 
 interface CampoPadrao {
+  [key: string]: string;
   nome: string;
   valor: string;
   tipo: string;
@@ -83,12 +84,12 @@ export function TemplateModal({ isOpen, onClose, template, onSuccess }: Template
     try {
       setLoading(true);
 
-      const dados = {
+      const dados: Database['public']['Tables']['cadastro_templates']['Insert'] = {
         tipo,
         nome_template: nomeTemplate,
         descricao,
-        campos_padrao: campos,
-        campos_obrigatorios: camposObrigatorios,
+        campos_padrao: campos as Json,
+        campos_obrigatorios: camposObrigatorios as Json,
         ativo: true
       };
 
@@ -130,7 +131,7 @@ export function TemplateModal({ isOpen, onClose, template, onSuccess }: Template
       isOpen={isOpen} 
       onClose={handleClose} 
       title={template ? 'Editar Template' : 'Novo Template de Cadastro'}
-      size="large"
+      size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Tipo */}
@@ -221,7 +222,6 @@ export function TemplateModal({ isOpen, onClose, template, onSuccess }: Template
                       value={campo.nome}
                       onChange={(e) => atualizarCampo(index, 'nome', e.target.value)}
                       placeholder="Ex: telefone, cpf"
-                      size="sm"
                       required
                     />
                   </div>
@@ -254,7 +254,6 @@ export function TemplateModal({ isOpen, onClose, template, onSuccess }: Template
                     value={campo.valor}
                     onChange={(e) => atualizarCampo(index, 'valor', e.target.value)}
                     placeholder="Valor padrão (opcional)"
-                    size="sm"
                   />
                 </div>
 
@@ -277,7 +276,7 @@ export function TemplateModal({ isOpen, onClose, template, onSuccess }: Template
 
           {campos.length === 0 && (
             <div className="text-center py-8 text-gray-500 text-sm border-2 border-dashed rounded-lg">
-              Nenhum campo adicionado. Clique em "Adicionar Campo" para começar.
+              Nenhum campo adicionado. Clique em &quot;Adicionar Campo&quot; para começar.
             </div>
           )}
         </div>

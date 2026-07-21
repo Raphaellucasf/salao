@@ -1,100 +1,51 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/api-auth';
+import { invalidateFinancialStats } from '@/lib/financial-stats-cache';
+import { createServerSupabase } from '@/lib/supabase-server';
 
-// POST - Fechar agendamento e calcular comissões
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PAYMENT_METHODS = new Set(['dinheiro', 'pix', 'cartao_credito', 'cartao_debito']);
+
+const ERRORS: Record<string, { status: number; message: string }> = {
+  APPOINTMENT_NOT_FOUND: { status: 404, message: 'Agendamento não encontrado' },
+  APPOINTMENT_HAS_COMANDA: { status: 409, message: 'Conclua este agendamento pelo fechamento da comanda' },
+  APPOINTMENT_CANCELLED: { status: 409, message: 'Agendamento cancelado não pode ser concluído' },
+  INVALID_APPOINTMENT_VALUE: { status: 409, message: 'Valor financeiro do agendamento inválido' },
+  INVALID_COMMISSION_PERCENTAGE: { status: 409, message: 'Percentual de comissão inválido' },
+  INVALID_PAYMENT_METHOD: { status: 400, message: 'Método de pagamento inválido' },
+};
+
 export async function POST(request: NextRequest) {
+  const authResult = await requireAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const body = await request.json();
-    const { appointment_id, payment_method } = body;
+    const appointmentId = typeof body.appointment_id === 'string' ? body.appointment_id : '';
+    const paymentMethod = typeof body.payment_method === 'string' ? body.payment_method : '';
 
-    if (!appointment_id || !payment_method) {
+    if (!UUID_PATTERN.test(appointmentId) || !PAYMENT_METHODS.has(paymentMethod)) {
+      return NextResponse.json({ error: 'Dados de fechamento inválidos' }, { status: 400 });
+    }
+
+    const { data, error } = await createServerSupabase(authResult.unitId).rpc('close_appointment_atomic' as never, {
+      p_appointment_id: appointmentId,
+      p_payment_method: paymentMethod,
+      p_admin_id: authResult.id,
+      p_unit_id: authResult.unitId,
+    } as never);
+
+    if (error) {
+      const mapped = ERRORS[error.message];
       return NextResponse.json(
-        { error: 'appointment_id e payment_method são obrigatórios' },
-        { status: 400 }
+        { error: mapped?.message ?? 'Não foi possível concluir o agendamento' },
+        { status: mapped?.status ?? 500 },
       );
     }
 
-    // Busca o agendamento com relacionamentos
-    const { data: appointment, error: appointmentError } = await supabase
-      .from('agendamentos')
-      .select(`
-        *,
-        profissional:profissionais(id, nome, percentual_comissao)
-      `)
-      .eq('id', appointment_id)
-      .single();
-
-    if (appointmentError || !appointment) {
-      return NextResponse.json({ error: 'Agendamento não encontrado' }, { status: 404 });
-    }
-
-    // Verifica se já foi finalizado
-    if ((appointment as any).status === 'concluido') {
-      return NextResponse.json({ error: 'Agendamento já foi finalizado' }, { status: 400 });
-    }
-
-    const servicePrice = (appointment as any).valor_total || 0;
-    const commissionPercentage = (appointment as any).profissional?.percentual_comissao || 0;
-    const commissionAmount = (servicePrice * commissionPercentage) / 100;
-    const salonAmount = servicePrice - commissionAmount;
-
-    // Inicia transação
-    // 1. Atualiza status do agendamento
-    const { error: updateError } = await supabase
-      .from('agendamentos')
-      .update({ status: 'concluido' })
-      .eq('id', appointment_id);
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
-
-    // 2. Registra entrada de receita (total)
-    const { data: incomeTransaction, error: incomeError } = await supabase
-      .from('transacoes')
-      .insert({
-        tipo: 'receita',
-        valor: servicePrice,
-        descricao: `Serviço - Cliente: ${(appointment as any).cliente_nome || 'N/A'}`,
-        metodo: payment_method
-      })
-      .select()
-      .single();
-
-    if (incomeError) {
-      return NextResponse.json({ error: incomeError.message }, { status: 500 });
-    }
-
-    // 3. Registra comissão do profissional
-    const { data: commissionTransaction, error: commissionError } = await supabase
-      .from('transacoes')
-      .insert({
-        tipo: 'comissao',
-        valor: commissionAmount,
-        descricao: `Comissão ${commissionPercentage}% - Profissional: ${(appointment as any).profissional?.nome || 'N/A'}`,
-        metodo: payment_method
-      })
-      .select()
-      .single();
-
-    if (commissionError) {
-      return NextResponse.json({ error: commissionError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      message: 'Agendamento finalizado e comissões calculadas com sucesso',
-      data: {
-        appointment_id,
-        service_price: servicePrice,
-        commission_percentage: commissionPercentage,
-        commission_amount: commissionAmount,
-        salon_amount: salonAmount,
-        income_transaction: incomeTransaction,
-        commission_transaction: commissionTransaction
-      }
-    });
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    invalidateFinancialStats();
+    return NextResponse.json({ message: 'Agendamento finalizado com sucesso', data });
+  } catch {
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }

@@ -16,7 +16,7 @@ function EstoquePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategoria, setFilterCategoria] = useState<'todos' | 'uso_interno'>('todos');
   const [produtos, setProdutos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [desfazerVendaModalOpen, setDesfazerVendaModalOpen] = useState(false);
   const [selectedProduto, setSelectedProduto] = useState<any>(null);

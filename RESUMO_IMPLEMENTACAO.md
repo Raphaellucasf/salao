@@ -35,8 +35,7 @@ O sistema de autenticação e controle de acesso baseado em roles (RBAC) do **Ot
 ### Backend (Database)
 | Arquivo | Descrição | Status |
 |---------|-----------|--------|
-| `database/migration_auth.sql` | Trigger, RLS policies, functions | ✅ Pronto |
-| `database/seed_users.sql` | 3 usuários de teste (admin + 2 profissionais) | ✅ Pronto |
+| `supabase/migrations/` | Cadeia canônica de schema, RLS e funções | ✅ Verificada no teste |
 
 ### Backend (Server)
 | Arquivo | Descrição | Status |
@@ -112,7 +111,7 @@ O sistema de autenticação e controle de acesso baseado em roles (RBAC) do **Ot
 ### Admin - Sr. Dimas
 ```
 Email: dimas@salaodimas.com
-Senha: Dimas@2024
+Senha: variável local `E2E_ADMIN_PASSWORD`
 Acesso: TOTAL
 Dashboard: /admin
 ```
@@ -120,7 +119,7 @@ Dashboard: /admin
 ### Profissional - João
 ```
 Email: joao@salaodimas.com
-Senha: Joao@2024
+Senha: variável local `E2E_PROFESSIONAL_PASSWORD`
 Acesso: LIMITADO (sem financeiro)
 Dashboard: /profissionais
 ```
@@ -200,10 +199,10 @@ Dashboard: /profissionais
 - **Padrão:** Clean Architecture
 - **Segurança:** Defense in Depth (3 camadas)
 - **Estado:** Context API (React)
-- **Routing:** App Router (Next.js 15)
+- **Routing:** App Router (Next.js 16.2.10)
 
 ### Tecnologias Utilizadas
-- Next.js 15.1.3
+- Next.js 16.2.10
 - React 19
 - TypeScript 5
 - Supabase (@supabase/ssr)

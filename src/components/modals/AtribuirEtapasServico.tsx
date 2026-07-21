@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -42,6 +41,8 @@ export default function AtribuirEtapasServico({
       auxiliar_id: undefined,
       exige_profissional: etapa.exige_profissional !== false
     }));
+    // Sincroniza o formulário local quando a seleção de etapas do modal muda.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAtribuicoes(iniciais);
   }, [etapas, profissionalPrincipalId]);
 

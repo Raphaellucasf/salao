@@ -1,8 +1,10 @@
 # 🎨 Otimiza Beauty Manager
 
+> Fonte canônica: consulte [docs/README.md](docs/README.md) para desenvolvimento, operação, segurança e auditoria. Documentos antigos na raiz são históricos.
+
 **Sistema SaaS Completo para Gestão de Salões de Beleza**
 
-Desenvolvido com Next.js 15, TypeScript, Tailwind CSS e Supabase.
+Desenvolvido com Next.js 16.2.10, React 19.2.7, TypeScript, Tailwind CSS e Supabase.
 
 ---
 
@@ -34,7 +36,8 @@ O **Otimiza Beauty Manager** é uma solução completa para gestão de salões d
 ## 🛠️ Stack Tecnológica
 
 ### Frontend
-- **Next.js 15** - Framework React com App Router
+- **Next.js 16.2.10** - Framework React com App Router
+- **React 19** - Biblioteca de interface
 - **TypeScript** - Tipagem estática
 - **Tailwind CSS** - Estilização responsiva mobile-first
 - **Lucide React** - Ícones modernos
@@ -96,14 +99,14 @@ O **Otimiza Beauty Manager** é uma solução completa para gestão de salões d
 
 ## 🔐 Autenticação e RBAC
 
-### ✅ Sistema Completo Implementado
+### Modelo implementado e riscos atuais
 
-O sistema possui autenticação robusta com controle de acesso baseado em roles (RBAC) em 3 camadas:
+O sistema combina autenticação e controle de acesso em três camadas. O estado verificável e as ressalvas de produção estão em `plans/AUDITORIA_VIVA.md`.
 
 #### 🛡️ Camada 1: Banco de Dados (RLS)
-- Políticas Row Level Security protegem dados sensíveis
-- Profissionais não conseguem acessar dados financeiros do salão
-- Trigger automático sincroniza `auth.users` → `public.users`
+- 56/56 tabelas públicas estão com RLS no teste.
+- As 50 tabelas de negócio têm unidade obrigatória, policy restritiva e proteção de relações entre tenants.
+- As seis tabelas globais de identidade/autorização são deliberadamente separadas do ownership de negócio.
 
 #### 🛡️ Camada 2: Servidor (Middleware)
 - Proteção de rotas antes da renderização
@@ -156,7 +159,7 @@ O sistema possui autenticação robusta com controle de acesso baseado em roles 
 ```
 otimiza-beauty/
 ├── src/
-│   ├── app/                      # App Router (Next.js 15)
+│   ├── app/                      # App Router (Next.js 16.2.10)
 │   │   ├── page.tsx              # Landing Page
 │   │   ├── agendar/              # Fluxo de agendamento
 │   │   ├── admin/                # Dashboard administrativo
@@ -174,8 +177,9 @@ otimiza-beauty/
 │   │   └── supabase.ts           # Cliente Supabase
 │   └── types/
 │       └── supabase.ts           # Tipagens do banco
-├── database/
-│   └── schema.sql                # Schema completo PostgreSQL
+├── supabase/
+│   ├── README.md                 # Procedimento canônico
+│   └── migrations/               # Única cadeia SQL executável
 ├── public/
 │   └── manifest.json             # PWA manifest
 ├── .env.local                    # Variáveis de ambiente
@@ -195,12 +199,9 @@ npm install
 
 ### 2. Configure o Supabase
 
-1. Crie um projeto em [supabase.com](https://supabase.com)
-2. No SQL Editor, execute na ordem:
-   - `database/schema.sql` - Schema principal
-   - `database/migration_auth.sql` - Sistema de autenticação
-   - `database/seed_users.sql` - Usuários de teste
-3. Copie as credenciais do projeto (Settings > API)
+1. Use um projeto Supabase de teste autorizado.
+2. Consulte `supabase/README.md`; `supabase/migrations/` é a única cadeia SQL executável.
+3. Obtenha URL, publishable key e uma secret key exclusiva para o backend em Settings > API Keys.
 
 ### 3. Configure as Variáveis de Ambiente
 
@@ -208,10 +209,15 @@ Edite o arquivo `.env.local`:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key_aqui
-SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key_aqui
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
 N8N_WEBHOOK_URL=https://seu-n8n.com/webhook/agendamento
 ```
+
+> Nunca grave a `SUPABASE_SECRET_KEY` em código, documentação, logs ou
+> arquivos versionados. Ela deve existir apenas no ambiente servidor. Execute
+> `npm run test:secrets` antes de publicar alterações e rotacione imediatamente
+> qualquer chave que tenha sido exposta.
 
 ### 4. Inicie o Servidor
 
@@ -227,11 +233,11 @@ Use as credenciais de teste (criadas pelo `seed_users.sql`):
 
 **Admin:**
 - Email: `dimas@salaodimas.com`
-- Senha: `Dimas@2024`
+- Senha: variável local `E2E_ADMIN_PASSWORD`
 
 **Profissional:**
 - Email: `joao@salaodimas.com`
-- Senha: `Joao@2024`
+- Senha: variável local `E2E_PROFESSIONAL_PASSWORD`
 
 > 💡 **Guia Rápido:** Veja [QUICK_START.md](QUICK_START.md) para setup em 5 minutos!
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -265,10 +271,12 @@ Acesse: [http://localhost:3000](http://localhost:3000)
 
 ### Políticas RLS (Row Level Security)
 
-✅ Acesso público para visualização de unidades, serviços e profissionais ativos  
-✅ Usuários podem ver/editar apenas seus próprios dados  
-✅ Admins têm acesso total  
-✅ Profissionais podem gerenciar suas agendas
+⚠️ Estado confirmado no Supabase de testes:
+
+- 56/56 tabelas públicas estão com RLS.
+- 50 tabelas de negócio têm fronteira restritiva por unidade, FK, índice e `unit_id` imutável.
+- Testes negativos entre unidades passaram no ambiente de teste.
+- Produção não foi comparada nem alterada; não se presume paridade.
 
 ---
 

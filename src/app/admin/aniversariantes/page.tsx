@@ -3,16 +3,15 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
-import { Cake, Phone, Mail, Gift, Calendar } from 'lucide-react';
+import { Cake, Phone, Mail, Gift } from 'lucide-react';
 
 interface Cliente {
-  id: string;
+  id: number;
   nome: string;
-  telefone?: string;
-  email?: string;
-  data_nascimento?: string;
+  telefone?: string | null;
+  email?: string | null;
+  data_nascimento?: string | null;
   idade?: number;
   dias_ate_aniversario?: number;
 }
@@ -28,10 +27,7 @@ export default function AniversariantesPage() {
   ];
 
   useEffect(() => {
-    loadAniversariantes();
-  }, [mesAtual]);
-
-  const loadAniversariantes = async () => {
+    const loadAniversariantes = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -47,7 +43,8 @@ export default function AniversariantesPage() {
       const anoAtual = hoje.getFullYear();
       
       const aniversariantes = (data || [])
-        .map((cliente: any) => {
+        .filter((cliente): cliente is typeof cliente & { data_nascimento: string } => Boolean(cliente.data_nascimento))
+        .map((cliente) => {
           const dataNasc = new Date(cliente.data_nascimento);
           const mesNasc = dataNasc.getMonth() + 1;
           const diaNasc = dataNasc.getDate();
@@ -69,8 +66,8 @@ export default function AniversariantesPage() {
             mes_nascimento: mesNasc
           };
         })
-        .filter((c: any) => c.mes_nascimento === mesAtual)
-        .sort((a: any, b: any) => {
+        .filter((c) => c.mes_nascimento === mesAtual)
+        .sort((a, b) => {
           const diaA = new Date(a.data_nascimento).getDate();
           const diaB = new Date(b.data_nascimento).getDate();
           return diaA - diaB;
@@ -83,7 +80,9 @@ export default function AniversariantesPage() {
     } finally {
       setLoading(false);
     }
-  };
+    };
+    void loadAniversariantes();
+  }, [mesAtual]);
 
   const enviarMensagem = (cliente: Cliente) => {
     if (!cliente.telefone) {

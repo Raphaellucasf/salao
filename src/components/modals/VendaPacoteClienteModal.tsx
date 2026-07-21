@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
-import { Package, User, Search, CheckCircle2 } from 'lucide-react';
+import { User, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { registrarCompraPacote, verificarPacoteAtivo } from '@/services/pacotes';
+import { verificarPacoteAtivo } from '@/services/pacotes';
 import type { PacoteAtivo } from '@/services/pacotes';
-import { DEFAULT_UNIT_ID } from '@/services/caixa';
 
 interface VendaPacoteClienteModalProps {
   isOpen: boolean;
@@ -31,6 +30,7 @@ export default function VendaPacoteClienteModal({ isOpen, onClose }: VendaPacote
 
   // Pagamento
   const [metodoPagamento, setMetodoPagamento] = useState('credito');
+  const requestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -96,6 +96,7 @@ export default function VendaPacoteClienteModal({ isOpen, onClose }: VendaPacote
     setPacotesAtuais([]);
     setPacoteSelecionado(null);
     setMetodoPagamento('credito');
+    requestIdRef.current = null;
   };
 
   const handleClose = () => {
@@ -108,37 +109,23 @@ export default function VendaPacoteClienteModal({ isOpen, onClose }: VendaPacote
     
     setLoading(true);
     try {
-      // 1. Criar array do item pro service
-      const itensPacote = [{ item_id: pacoteSelecionado.id, quantidade: 1 }];
-
-      // 2. Chamar o service para registrar a compra em pacotes_cliente
-      await registrarCompraPacote({
-        comandaId: null, // Venda direta
-        clienteId: cliente.id,
-        clienteCpf: cliente.cpf || null,
-        itensPacote,
-        unitId: DEFAULT_UNIT_ID
-      });
-
-      // 3. Registrar transação
-      const { data: fechamento } = await supabase
-        .from('fechamentos_caixa')
-        .select('id')
-        .eq('status', 'aberto')
-        .single();
-
-      if (fechamento) {
-        await supabase.from('transacoes').insert({
-          tipo: 'receita',
-          valor: pacoteSelecionado.preco_total,
-          descricao: `Venda Pacote: ${pacoteSelecionado.nome} (Cliente: ${cliente.nome})`,
+      requestIdRef.current ??= crypto.randomUUID();
+      const response = await fetch('/api/admin/pacotes/venda', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_id: requestIdRef.current,
+          cliente_id: cliente.id,
+          pacote_id: pacoteSelecionado.id,
+          quantidade: 1,
           metodo_pagamento: metodoPagamento,
-          data_transacao: new Date().toISOString(),
-          fechamento_id: fechamento.id
-        });
-      }
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
 
       toast.success('Pacote vendido e vinculado com sucesso!');
+      requestIdRef.current = null;
       handleClose();
     } catch (err: any) {
       toast.error('Erro ao realizar venda: ' + err.message);

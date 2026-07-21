@@ -1,8 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
-import Button from './Button';
+import { useEffect, useId, useRef } from 'react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,57 +12,95 @@ interface ModalProps {
 }
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
+    if (!isOpen) return;
+
+    const previousActive = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const focusTimer = window.setTimeout(() => {
+      const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (firstFocusable || dialogRef.current)?.focus();
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-  }, [isOpen]);
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousActive?.focus();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const sizes = {
-    sm: 'max-w-md',
-    md: 'max-w-2xl',
-    lg: 'max-w-4xl',
-    xl: 'max-w-6xl',
-  };
+  const sizes = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl' };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-6">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default bg-primary-950/55 backdrop-blur-sm"
         onClick={onClose}
+        aria-label="Fechar janela"
+        tabIndex={-1}
       />
-      
-      {/* Modal - Com margens: 5% laterais, 3% topo/base */}
-      <div 
-        className={`relative bg-white rounded-2xl shadow-2xl w-[90vw] ${sizes[size]} overflow-hidden flex flex-col`}
-        style={{ 
-          maxHeight: 'calc(94vh)',
-          margin: '3vh 5vw'
-        }}
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={`relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/60 bg-white shadow-2xl outline-none sm:max-h-[88vh] sm:rounded-3xl ${sizes[size]}`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-neutral-200">
-          <h2 className="text-2xl font-bold text-neutral-900">{title}</h2>
+        <div className="flex items-center justify-between gap-4 border-b border-neutral-100 px-5 py-4 sm:px-6 sm:py-5">
+          <div>
+            <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-accent-700">Dimas Dona</p>
+            <h2 id={titleId} className="text-xl font-semibold tracking-[-0.025em] text-neutral-950 sm:text-2xl">{title}</h2>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+            aria-label="Fechar"
           >
-            <X className="w-6 h-6 text-neutral-600" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
       </div>
     </div>
   );

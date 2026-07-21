@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -123,7 +122,7 @@ export default function FormaPagamentoModal({ isOpen, onClose, onSuccess, forma 
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={forma ? 'Editar Forma de Pagamento' : 'Nova Forma de Pagamento'} size="lg">
       <div className="px-6 py-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">

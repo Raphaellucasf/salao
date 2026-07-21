@@ -22,12 +22,12 @@ import { supabase } from '@/lib/supabase';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Cliente {
-  id: string;
+  id: number;
   nome: string;
   telefone: string;
-  email: string;
-  status: string;
-  created_at: string;
+  email: string | null;
+  status: string | null;
+  created_at: string | null;
 }
 
 interface ComandaItem {
@@ -144,7 +144,7 @@ function ProgressBar({ consumed, total }: { consumed: number; total: number }) {
 export default function ClientePerfilPage() {
   const router = useRouter();
   const params = useParams();
-  const clienteId = params?.id as string;
+  const clienteId = Number(params?.id);
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [loadingCliente, setLoadingCliente] = useState(true);
@@ -204,7 +204,7 @@ export default function ClientePerfilPage() {
 
         const comandaIds = comandas.map((c) => c.id);
         const comandaDateMap: Record<string, string> = {};
-        comandas.forEach((c) => { comandaDateMap[c.id] = c.created_at; });
+        comandas.forEach((c) => { comandaDateMap[c.id] = c.created_at ?? ''; });
 
         // Busca itens dessas comandas
         const { data: itens, error: erroItens } = await supabase

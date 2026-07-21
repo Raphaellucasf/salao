@@ -1,99 +1,86 @@
-// @ts-nocheck
-/**
- * API para n8n / WhatsApp bot
- * GET /api/whatsapp/horarios?profissional_id=UUID&data=YYYY-MM-DD&duracao=30
- *
- * Retorna os slots livres de um profissional em um dia específico.
- * Chame com a API Key no header: x-api-key: <N8N_API_KEY>
- */
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  getAvailableSlots,
+  isValidSchedulingDate,
+  isValidUuid,
+  ProfessionalNotFoundError,
+} from '@/lib/appointment-availability';
+import { createServerSupabase } from '@/lib/supabase-server';
+import { getRequestId, logSecurityEvent, toErrorDetails } from '@/lib/observability';
 
-const API_KEY = process.env.N8N_API_KEY;
+function safeKeyEquals(provided: string, expected: string): boolean {
+  const providedHash = createHash('sha256').update(provided).digest();
+  const expectedHash = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(providedHash, expectedHash);
+}
 
 export async function GET(request: NextRequest) {
-  // Validação da chave de API
-  const apiKey = request.headers.get('x-api-key');
-  if (API_KEY && apiKey !== API_KEY) {
+  const requestId = getRequestId(request);
+  const expectedKey = process.env.N8N_API_KEY;
+  if (!expectedKey) {
+    logSecurityEvent({ event: 'integration.config_missing', route: request.nextUrl.pathname, status: 503, requestId, integration: 'n8n' });
+    return NextResponse.json({ error: 'Integração indisponível.' }, { status: 503 });
+  }
+  const providedKey = request.headers.get('x-api-key') ?? '';
+  if (!providedKey || !safeKeyEquals(providedKey, expectedKey)) {
+    logSecurityEvent({ event: 'integration.auth_rejected', route: request.nextUrl.pathname, status: 401, requestId, integration: 'n8n' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const professionalId = searchParams.get('profissional_id');
+  const date = searchParams.get('data');
+  const duration = Number(searchParams.get('duracao') ?? '30');
+  if (!professionalId || !date) {
+    return NextResponse.json(
+      { error: 'Parâmetros obrigatórios: profissional_id e data (YYYY-MM-DD).' },
+      { status: 400 },
+    );
+  }
+  if (!isValidUuid(professionalId)) {
+    return NextResponse.json({ error: 'profissional_id inválido.' }, { status: 400 });
+  }
+  if (!isValidSchedulingDate(date)) {
+    return NextResponse.json({ error: 'Data inválida ou no passado.' }, { status: 400 });
+  }
+  if (!Number.isInteger(duration) || duration < 1 || duration > 480) {
+    return NextResponse.json({ error: 'Duração inválida.' }, { status: 400 });
+  }
+
   try {
-    const { searchParams } = request.nextUrl;
-    const profissional_id = searchParams.get('profissional_id');
-    const data = searchParams.get('data'); // formato YYYY-MM-DD
-    const duracao = parseInt(searchParams.get('duracao') || '30');
-
-    if (!profissional_id || !data) {
-      return NextResponse.json(
-        { error: 'Parâmetros obrigatórios: profissional_id e data (YYYY-MM-DD)' },
-        { status: 400 }
-      );
-    }
-
-    // Validar formato da data
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
-      return NextResponse.json(
-        { error: 'Formato de data inválido. Use YYYY-MM-DD' },
-        { status: 400 }
-      );
-    }
-
-    // Buscar nome do profissional
-    const { data: profissional } = await supabase
-      .from('profissionais')
-      .select('id, nome')
-      .eq('id', profissional_id)
-      .eq('ativo', true)
-      .single();
-
-    if (!profissional) {
-      return NextResponse.json(
-        { error: 'Profissional não encontrado ou inativo' },
-        { status: 404 }
-      );
-    }
-
-    // Chamar a função de horários vagos
-    const { data: slots, error } = await supabase
-      .rpc('fn_horarios_vagos', {
-        p_profissional_id: profissional_id,
-        p_data: data,
-        p_duracao_minutos: duracao,
-      });
-
-    if (error) throw error;
-
-    // Filtrar apenas os horários livres e formatar
-    const livres = (slots || [])
-      .filter((s: any) => s.livre)
-      .map((s: any) => ({
-        hora_inicio: s.hora_inicio.slice(0, 5), // "HH:MM"
-        hora_fim: s.hora_fim.slice(0, 5),
-      }));
-
-    // Formatar data para exibição
-    const [ano, mes, dia] = data.split('-');
+    const catalogDb = createServerSupabase() as unknown as SupabaseClient;
+    const { data: owner, error: ownerError } = await catalogDb.from('profissionais')
+      .select('unit_id').eq('id', professionalId).eq('ativo', true).maybeSingle();
+    if (ownerError || !owner) throw new ProfessionalNotFoundError();
+    const unitId = (owner as { unit_id: string }).unit_id;
+    const db = createServerSupabase(unitId) as unknown as SupabaseClient;
+    const { professional, slots } = await getAvailableSlots(db, professionalId, date, duration, unitId);
+    const livres = slots
+      .filter((slot) => slot.livre)
+      .map(({ hora_inicio, hora_fim }) => ({ hora_inicio, hora_fim }));
+    const [ano, mes, dia] = date.split('-');
     const dataFormatada = `${dia}/${mes}/${ano}`;
 
     return NextResponse.json({
-      profissional: {
-        id: profissional.id,
-        nome: profissional.nome,
-      },
+      profissional: professional,
       data: dataFormatada,
-      data_iso: data,
+      data_iso: date,
       total_livres: livres.length,
       horarios_livres: livres,
-      // Texto pronto para enviar no WhatsApp
-      mensagem_whatsapp: livres.length === 0
-        ? `Não há horários disponíveis com ${profissional.nome} no dia ${dataFormatada}.`
-        : `*Horários disponíveis com ${profissional.nome} em ${dataFormatada}:*\n\n` +
-          livres.map((h: any, i: number) => `${i + 1}. ${h.hora_inicio} às ${h.hora_fim}`).join('\n') +
-          '\n\nQual horário prefere?',
+      mensagem_whatsapp:
+        livres.length === 0
+          ? `Não há horários disponíveis com ${professional.nome} no dia ${dataFormatada}.`
+          : `*Horários disponíveis com ${professional.nome} em ${dataFormatada}:*\n\n${livres
+              .map((slot, index) => `${index + 1}. ${slot.hora_inicio} às ${slot.hora_fim}`)
+              .join('\n')}\n\nQual horário prefere?`,
     });
-  } catch (error: any) {
-    console.error('[API horarios]', error);
-    return NextResponse.json({ error: error.message || 'Erro interno' }, { status: 500 });
+  } catch (error) {
+    if (error instanceof ProfessionalNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+    logSecurityEvent({ event: 'integration.availability_failure', route: request.nextUrl.pathname, status: 500, requestId, integration: 'n8n', ...toErrorDetails(error) });
+    return NextResponse.json({ error: 'Erro interno.' }, { status: 500 });
   }
 }

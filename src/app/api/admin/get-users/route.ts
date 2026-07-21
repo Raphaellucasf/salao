@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createServerSupabase } from '@/lib/supabase-server';
 import { requireAdmin } from '@/lib/api-auth';
 
 /**
@@ -10,6 +10,7 @@ import { requireAdmin } from '@/lib/api-auth';
 export async function GET(req: NextRequest) {
   const authCheck = await requireAdmin(req);
   if (authCheck instanceof NextResponse) return authCheck;
+  const supabaseAdmin = createServerSupabase(authCheck.unitId);
 
   try {
     const { data: usuarios, error } = await supabaseAdmin
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ usuarios: usuarios ?? [] });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Erro interno' }, { status: 500 });
   }
 }

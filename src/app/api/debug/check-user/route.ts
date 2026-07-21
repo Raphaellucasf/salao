@@ -1,31 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/api-auth';
+import { createRequestSupabase } from '@/lib/supabase-request';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 // Endpoint de diagnóstico TEMPORÁRIO — remover após correção
 export async function GET(req: NextRequest) {
-  const anonSupabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return req.cookies.getAll(); },
-        setAll() {},
-      },
-    }
-  );
+  const authResult = await requireAdmin(req);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const anonSupabase = createRequestSupabase(req);
 
   const { data: { user }, error: authError } = await anonSupabase.auth.getUser();
 
-  if (!user) {
+  if (!user || !user.email) {
     return NextResponse.json({ error: 'Não autenticado', authError });
   }
 
-  const adminClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+  const adminClient = createServerSupabase(authResult.unitId);
 
   // Verifica na tabela users
   const { data: userRow, error: usersError } = await adminClient

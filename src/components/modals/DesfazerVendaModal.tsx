@@ -1,12 +1,9 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { AlertTriangle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 interface DesfazerVendaModalProps {
   isOpen: boolean;
@@ -29,18 +26,15 @@ export default function DesfazerVendaModal({ isOpen, onClose, onSave }: Desfazer
 
   const loadVendas = async () => {
     try {
-      const hoje = new Date();
-      hoje.setDate(hoje.getDate() - 7); // Últimos 7 dias
-
-      const { data, error } = await supabase
-        .from('vendas_produtos')
-        .select('*')
-        .eq('estornada', false)
-        .gte('created_at', hoje.toISOString())
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setVendas(data || []);
+      const response = await fetch('/api/admin/estoque');
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
+      setVendas((result.vendas || []).map((item: any) => ({
+        ...item,
+        produto_nome: item.produtos?.nome ?? 'Produto',
+        valor_unitario: Number(item.valor_unitario) || 0,
+        valor_total: Number(item.valor_total) || 0,
+      })));
     } catch (err) {
       console.error('Erro ao carregar vendas:', err);
     }
@@ -61,36 +55,13 @@ export default function DesfazerVendaModal({ isOpen, onClose, onSave }: Desfazer
     setError('');
 
     try {
-      const venda = vendas.find(v => v.id === selectedVenda);
-      if (!venda) throw new Error('Venda não encontrada');
-
-      // Marcar venda como estornada
-      const { error: updateError } = await supabase
-        .from('vendas_produtos')
-        .update({
-          estornada: true,
-          data_estorno: new Date().toISOString(),
-          motivo_estorno: motivo,
-        })
-        .eq('id', selectedVenda);
-
-      if (updateError) throw updateError;
-
-      // Devolver produto ao estoque
-      const { data: produto } = await supabase
-        .from('produtos')
-        .select('quantidade')
-        .eq('id', venda.produto_id)
-        .single();
-
-      if (produto) {
-        await supabase
-          .from('produtos')
-          .update({
-            quantidade: produto.quantidade + venda.quantidade,
-          })
-          .eq('id', venda.produto_id);
-      }
+      const response = await fetch(`/api/admin/estoque?movimentacao_id=${selectedVenda}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
 
       onSave();
       onClose();
@@ -154,7 +125,7 @@ export default function DesfazerVendaModal({ isOpen, onClose, onSave }: Desfazer
                     <div className="flex-1">
                       <p className="font-medium text-neutral-900">{venda.produto_nome}</p>
                       <p className="text-sm text-neutral-600">
-                        Cliente: {venda.cliente_nome || 'Não informado'}
+                        Movimento de estoque
                       </p>
                       <p className="text-xs text-neutral-500 mt-1">
                         {new Date(venda.created_at).toLocaleString('pt-BR')}

@@ -92,10 +92,9 @@ function ServicosNewPage() {
   };
 
   const deleteServico = async (id: string) => {
-    const { error: etapasError } = await supabase.from('servico_etapas').delete().eq('servico_id', id);
-    if (etapasError) throw etapasError;
-    const { error } = await supabase.from('servicos').delete().eq('id', id);
-    if (error) throw error;
+    const response = await fetch(`/api/admin/servicos?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Erro ao excluir serviço');
   };
 
   const deleteGrupo = async (id: string) => {
@@ -116,8 +115,13 @@ function ServicosNewPage() {
       if (type === 'servico') await deleteServico(id);
       else if (type === 'grupo') await deleteGrupo(id);
       else {
-        const { error } = await supabase.from('pacotes_servicos').delete().eq('id', id);
-        if (error) throw error;
+        const response = await fetch(`/api/admin/pacotes?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const result: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message = typeof result === 'object' && result !== null && 'error' in result && typeof result.error === 'string'
+            ? result.error : 'Erro ao excluir pacote';
+          throw new Error(message);
+        }
       }
       loadData();
     } catch (error: any) {

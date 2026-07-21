@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -109,7 +108,7 @@ export default function GrupoProdutoModal({ isOpen, onClose, grupo, onSave }: Gr
       isOpen={isOpen}
       onClose={onClose}
       title={grupo ? 'Editar Grupo de Produto' : 'Novo Grupo de Produto'}
-      size="medium"
+      size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (

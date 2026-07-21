@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { verificarPacoteAtivo, debitarSessaoPacote, type PacoteAtivo } from '@/services/pacotes';
+import { verificarPacoteAtivo, type PacoteAtivo } from '@/services/pacotes';
 import { X, User, Scissors, Clock, Search, Calendar, ChevronDown, Gift, ShoppingBag } from 'lucide-react';
 
 interface Props {
@@ -16,9 +16,9 @@ interface Props {
   professionals: { id: string; name: string; color: string }[];
 }
 
-interface Cliente { id: string; nome: string; telefone?: string; }
+interface Cliente { id: number; nome: string; telefone?: string; }
 interface Servico { id: string; nome: string; duracao_minutos: number; preco?: number; pacoteClienteId?: string; }
-interface Produto { id: string; nome: string; preco?: number; quantidade?: number; }
+interface Produto { id: string; nome: string; preco_venda?: number; quantidade?: number; }
 interface ItemProduto { id: string; nome: string; preco: number; quantidade: number; }
 
 export default function NovoAgendamentoModal({
@@ -37,6 +37,8 @@ export default function NovoAgendamentoModal({
   const [servicoOpen, setServicosOpen] = useState(false);
   const [searchS, setSearchS] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  const [recorrencia, setRecorrencia] = useState<'nenhuma' | 'semanal' | 'mensal'>('nenhuma');
+  const [ocorrencias, setOcorrencias] = useState(4);
   const [saving, setSaving] = useState(false);
   const [pacotesAtivos, setPacotesAtivos] = useState<PacoteAtivo[]>([]);
   // Produtos
@@ -45,7 +47,7 @@ export default function NovoAgendamentoModal({
   const [produtoOpen, setProdutoOpen] = useState(false);
   const [searchP, setSearchP] = useState('');
   const clienteRef = useRef<HTMLInputElement>(null);
-  const debounce = useRef<NodeJS.Timeout>();
+  const debounce = useRef<NodeJS.Timeout | undefined>(undefined);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -53,11 +55,12 @@ export default function NovoAgendamentoModal({
     setHoraInicio(time);
     setSearchCliente(''); setClienteSel(null); setServicosSel([]);
     setObservacoes(''); setClienteDropdown(false); setServicosOpen(false);
+    setRecorrencia('nenhuma'); setOcorrencias(4);
     setPacotesAtivos([]);
     setItensProduto([]); setProdutoOpen(false); setSearchP('');
     supabase.from('servicos').select('id,nome,duracao_minutos,preco').eq('ativo', true).order('nome')
       .then(({ data }) => { if (data) setServicos(data); });
-    supabase.from('produtos').select('id,nome,preco').in('tipo', ['venda', 'revenda']).eq('ativo', true).order('nome')
+    supabase.from('produtos').select('id,nome,preco_venda').eq('tipo', 'revenda').eq('ativo', true).order('nome')
       .then(({ data }) => { if (data) setProdutos(data || []); });
     setTimeout(() => clienteRef.current?.focus(), 120);
   }, [isOpen, professionalId, time]);
@@ -99,87 +102,47 @@ export default function NovoAgendamentoModal({
   };
 
   const salvar = async () => {
-    if (!searchCliente.trim()) { alert('Informe o cliente'); return; }
+    if (!clienteSel) { alert('Selecione um cliente cadastrado'); return; }
+    if (recorrencia !== 'nenhuma' && (itensProduto.length > 0 || servicosSel.some(s => s.pacoteClienteId))) {
+      alert('Agendamentos recorrentes aceitam somente serviços avulsos. Produtos e sessões de pacote devem ser lançados individualmente.');
+      return;
+    }
     setSaving(true);
     try {
-      // 1. Criar o agendamento
-      const { data: novoAg, error: agError } = await supabase
-        .from('agendamentos')
-        .insert([{
-          cliente_id: clienteSel?.id || null,
-          cliente_nome: clienteSel?.nome || searchCliente.trim(),
-          profissional_id: profId,
-          data_agendamento: date,
-          hora_inicio: horaInicio + ':00',
-          hora_fim: horaFim(),
-          status: 'agendado',
-          servicos: JSON.stringify(servicosSel.map(s => ({ id: s.id, nome: s.nome, duracao_minutos: s.duracao_minutos, preco: s.preco ?? 0 }))),
-          duracao_total: duracao,
-          observacoes: observacoes || null,
-        }])
-        .select()
-        .single();
-      if (agError) throw agError;
-
-      // 2. Criar a comanda vinculada ao agendamento
-      const totalServicos = servicosSel.reduce((sum, s) => sum + (s.preco ?? 0), 0);
-      const { data: novaComanda, error: cmdError } = await supabase
-        .from('comandas')
-        .insert([{
-          cliente_id: clienteSel?.id || null,
-          cliente_nome: clienteSel?.nome || searchCliente.trim(),
+      const itensServico = servicosSel.map(s => ({
+        tipo: 'servico' as const,
+        item_id: String(s.id),
+        quantidade: 1,
+        pacote_cliente_id: s.pacoteClienteId ?? null,
+        atribuicoes_etapas: [],
+      }));
+      const itensProd = itensProduto.map(p => ({
+        tipo: 'produto' as const,
+        item_id: String(p.id),
+        quantidade: p.quantidade,
+        pacote_cliente_id: null,
+        atribuicoes_etapas: [],
+      }));
+      const response = await fetch('/api/admin/comandas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: clienteSel.id,
           profissional_id: profId,
           data_agendamento: date,
           hora_inicio: horaInicio,
-          status: 'aberta',
-          total: totalServicos,
-          observacoes: observacoes || null,
-        }])
-        .select()
-        .single();
-      if (cmdError) throw cmdError;
-
-      // 3. Criar os itens da comanda (serviços + produtos)
-      const itensServico = servicosSel.map(s => ({
-        comanda_id: novaComanda.id,
-        tipo: 'servico' as const,
-        item_id: String(s.id),
-        descricao: s.pacoteClienteId ? s.nome + ' (Sessão de Pacote)' : s.nome,
-        quantidade: 1,
-        valor_unitario: s.preco ?? 0,
-        valor_total: s.preco ?? 0,
-        profissional_id: profId,
-      }));
-      const itensProd = itensProduto.map(p => ({
-        comanda_id: novaComanda.id,
-        tipo: 'produto' as const,
-        item_id: String(p.id),
-        descricao: p.nome,
-        quantidade: p.quantidade,
-        valor_unitario: p.preco,
-        valor_total: p.preco * p.quantidade,
-        profissional_id: profId,
-      }));
-      const todosItens = [...itensServico, ...itensProd];
-      if (todosItens.length > 0 && novaComanda) {
-        const { error: itensError } = await supabase.from('comanda_itens').insert(todosItens);
-        if (itensError) console.warn('Aviso: erro ao criar itens da comanda:', itensError.message);
-      }
-
-      // 4. Vincular comanda ao agendamento
-      await supabase
-        .from('agendamentos')
-        .update({ comanda_id: novaComanda.id, status: 'em_andamento' })
-        .eq('id', novoAg.id);
-
-      // 5. Debitar sessões de pacotes usados
-      const itensPacote = servicosSel.filter(s => s.pacoteClienteId);
-      for (const item of itensPacote) {
-        try { await debitarSessaoPacote(item.pacoteClienteId!); } catch (e) { console.error('Erro ao debitar sessão:', e); }
-      }
+          observacoes,
+          itens: [...itensServico, ...itensProd],
+          recorrencia: recorrencia === 'nenhuma'
+            ? null
+            : { frequencia: recorrencia, ocorrencias },
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
 
       onSuccess(); onClose();
-    } catch (e: any) { alert('Erro: ' + e.message); }
+    } catch (e: unknown) { alert('Erro: ' + (e instanceof Error ? e.message : 'Tente novamente')); }
     finally { setSaving(false); }
   };
 
@@ -363,13 +326,13 @@ export default function NovoAgendamentoModal({
                         setItensProduto(prev => {
                           const exists = prev.find(x => x.id === p.id);
                           if (exists) return prev.map(x => x.id === p.id ? { ...x, quantidade: x.quantidade + 1 } : x);
-                          return [...prev, { id: p.id, nome: p.nome, preco: p.preco ?? 0, quantidade: 1 }];
+                          return [...prev, { id: p.id, nome: p.nome, preco: p.preco_venda ?? 0, quantidade: 1 }];
                         });
                         setProdutoOpen(false);
                       }}
                       className="w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-neutral-50 border-b border-neutral-50 last:border-0 transition-colors">
                       <span className="text-sm font-medium">{p.nome}</span>
-                      <span className="text-xs text-neutral-400">R$ {Number(p.preco ?? 0).toFixed(2)}</span>
+                      <span className="text-xs text-neutral-400">R$ {Number(p.preco_venda ?? 0).toFixed(2)}</span>
                     </button>
                   ))}
                   {produtosFiltrados.length === 0 && (
@@ -405,6 +368,38 @@ export default function NovoAgendamentoModal({
               </div>
             </div>
           )}
+
+          <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+              Repetição
+            </label>
+            <div className="grid grid-cols-[1fr_92px] gap-2">
+              <select
+                value={recorrencia}
+                onChange={e => setRecorrencia(e.target.value as typeof recorrencia)}
+                className="w-full px-3 py-2.5 border border-neutral-200 bg-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="nenhuma">Não repetir</option>
+                <option value="semanal">Toda semana</option>
+                <option value="mensal">Todo mês</option>
+              </select>
+              <input
+                type="number"
+                aria-label="Quantidade de ocorrências"
+                min={2}
+                max={52}
+                value={ocorrencias}
+                disabled={recorrencia === 'nenhuma'}
+                onChange={e => setOcorrencias(Math.min(52, Math.max(2, Number(e.target.value) || 2)))}
+                className="w-full px-3 py-2.5 border border-neutral-200 bg-white rounded-xl text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            {recorrencia !== 'nenhuma' && (
+              <p className="mt-2 text-xs text-neutral-500">
+                Serão criados {ocorrencias} agendamentos, incluindo esta data.
+              </p>
+            )}
+          </div>
 
           {/* Observações */}
           <div>

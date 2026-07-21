@@ -1,8 +1,8 @@
 ﻿'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Star, TrendingUp, DollarSign, Calendar, Award, Edit, MoreVertical } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Plus, Search, Star, TrendingUp, DollarSign, Award, Edit } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';

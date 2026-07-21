@@ -30,10 +30,10 @@ export async function buscarFaturamento(periodo: PeriodoFiltro) {
       return [];
     }
 
-    return data.map((t: any) => ({
+    return data.map((t) => ({
       Data: new Date(`${t.data}T00:00:00`).toLocaleDateString('pt-BR'),
       Descrição: t.descricao || 'N/A',
-      Valor: parseFloat(t.valor || 0),
+      Valor: Number(t.valor || 0),
       Pagamento: t.metodo || 'N/A',
       Tipo: t.tipo === 'receita' ? 'Receita' : t.tipo === 'despesa' ? 'Despesa' : 'Comissão',
     }));
@@ -66,28 +66,31 @@ export async function buscarClientes(periodo: PeriodoFiltro) {
       .gte('data_agendamento', formatDate(periodo.dataInicio))
       .lte('data_agendamento', formatDate(periodo.dataFim));
 
+    const resumoPorCliente = new Map<string, { visitas: number; ultimaVisita: string }>();
+    for (const agendamento of agendamentos || []) {
+      const clienteId = String(agendamento.cliente_id ?? '');
+      const dataAgendamento = String(agendamento.data_agendamento ?? '');
+      if (!clienteId || !dataAgendamento) continue;
+      const atual = resumoPorCliente.get(clienteId);
+      resumoPorCliente.set(clienteId, {
+        visitas: (atual?.visitas ?? 0) + 1,
+        ultimaVisita: !atual || dataAgendamento > atual.ultimaVisita
+          ? dataAgendamento
+          : atual.ultimaVisita,
+      });
+    }
+
     return data
-      .map((cliente: any) => {
-        const clienteAgendamentos = (agendamentos || []).filter(
-          (ag: any) => ag.cliente_id === cliente.id
-        );
-
-        if (clienteAgendamentos.length === 0) return null;
-
-        const ultimaVisita = clienteAgendamentos.reduce((latest: any, ag: any) => {
-          return !latest || new Date(ag.data_agendamento) > new Date(latest.data_agendamento)
-            ? ag
-            : latest;
-        }, null);
+      .map((cliente) => {
+        const resumo = resumoPorCliente.get(String(cliente.id));
+        if (!resumo) return null;
 
         return {
           Nome: cliente.nome,
           Telefone: cliente.telefone || 'N/A',
           Email: cliente.email || 'N/A',
-          'Última Visita': ultimaVisita
-            ? new Date(`${ultimaVisita.data_agendamento}T00:00:00`).toLocaleDateString('pt-BR')
-            : 'N/A',
-          Visitas: clienteAgendamentos.length,
+          'Última Visita': new Date(`${resumo.ultimaVisita}T00:00:00`).toLocaleDateString('pt-BR'),
+          Visitas: resumo.visitas,
           Status: 'Ativo',
         };
       })
@@ -124,19 +127,21 @@ export async function buscarServicos(periodo: PeriodoFiltro) {
       .eq('status', 'concluido');
 
     const contagemServicos: Record<string, number> = {};
-    (agendamentos || []).forEach((ag: any) => {
+    (agendamentos || []).forEach((ag) => {
       try {
         const servs = typeof ag.servicos === 'string' ? JSON.parse(ag.servicos) : ag.servicos;
         if (Array.isArray(servs)) {
-          servs.forEach((s: any) => {
-            if (s.id) contagemServicos[s.id] = (contagemServicos[s.id] || 0) + 1;
+          servs.forEach((value: unknown) => {
+            if (typeof value === 'object' && value !== null && 'id' in value && typeof value.id === 'string') {
+              contagemServicos[value.id] = (contagemServicos[value.id] || 0) + 1;
+            }
           });
         }
       } catch {}
     });
 
     return data
-      .map((servico: any) => {
+      .map((servico) => {
         const qtd = contagemServicos[servico.id] || 0;
         if (qtd === 0) return null;
         return {
@@ -148,7 +153,7 @@ export async function buscarServicos(periodo: PeriodoFiltro) {
         };
       })
       .filter(Boolean)
-      .sort((a: any, b: any) => b['Qtd Realizada'] - a['Qtd Realizada']);
+      .sort((a, b) => (b?.['Qtd Realizada'] ?? 0) - (a?.['Qtd Realizada'] ?? 0));
   } catch (error) {
     console.error('Erro ao buscar serviços:', error);
     return [];
@@ -158,12 +163,13 @@ export async function buscarServicos(periodo: PeriodoFiltro) {
 // ==================== RELATÓRIO DE PRODUTOS ====================
 export async function buscarProdutos(periodo: PeriodoFiltro) {
   try {
+    void periodo;
     // Seleciona ambas as variantes de nome de coluna para compatibilidade
     // com os dois schemas possíveis: produtos_migration (preco_custo/preco_venda)
     // e SETUP_COMPLETO (preco/custo)
     const { data, error } = await supabase
       .from('produtos')
-      .select('id, nome, categoria, quantidade, preco_custo, preco_venda, preco, custo')
+      .select('id, nome, categoria, quantidade, preco_custo, preco_venda')
       .order('nome');
 
     if (error) {
@@ -175,9 +181,9 @@ export async function buscarProdutos(periodo: PeriodoFiltro) {
       return [];
     }
 
-    return data.map((produto: any) => {
-      const custoBruto = produto.preco_custo ?? produto.custo ?? null;
-      const vendaBruto = produto.preco_venda ?? produto.preco ?? null;
+    return data.map((produto) => {
+      const custoBruto = produto.preco_custo ?? null;
+      const vendaBruto = produto.preco_venda ?? null;
       return {
         Produto: produto.nome,
         Categoria: produto.categoria || 'Geral',
@@ -216,23 +222,30 @@ export async function buscarProfissionais(periodo: PeriodoFiltro) {
       .lte('data_agendamento', formatDate(periodo.dataFim))
       .eq('status', 'concluido');
 
-    return profissionais
-      .map((prof: any) => {
-        const profAgendamentos = (agendamentos || []).filter(
-          (ag: any) => ag.profissional_id === prof.id
-        );
+    const atendimentosPorProfissional = new Map<string, number>();
+    for (const agendamento of agendamentos || []) {
+      const profissionalId = String(agendamento.profissional_id ?? '');
+      if (!profissionalId) continue;
+      atendimentosPorProfissional.set(
+        profissionalId,
+        (atendimentosPorProfissional.get(profissionalId) ?? 0) + 1
+      );
+    }
 
-        if (profAgendamentos.length === 0) return null;
+    return profissionais
+      .map((prof) => {
+        const atendimentos = atendimentosPorProfissional.get(String(prof.id)) ?? 0;
+        if (atendimentos === 0) return null;
 
         return {
           Profissional: prof.nome,
-          Atendimentos: profAgendamentos.length,
+          Atendimentos: atendimentos,
           Comissão: `${prof.percentual_comissao || 0}%`,
           Status: 'Ativo',
         };
       })
       .filter(Boolean)
-      .sort((a: any, b: any) => b.Atendimentos - a.Atendimentos);
+      .sort((a, b) => (b?.Atendimentos ?? 0) - (a?.Atendimentos ?? 0));
   } catch (error) {
     console.error('Erro ao buscar profissionais:', error);
     return [];
@@ -259,9 +272,9 @@ export async function buscarAgenda(periodo: PeriodoFiltro) {
     }
 
     // Agrupa por data
-    const porData: Record<string, any> = {};
+    const porData: Record<string, { total: number; realizados: number; cancelados: number; noShow: number }> = {};
 
-    data.forEach((ag: any) => {
+    data.forEach((ag) => {
       const d = ag.data_agendamento;
       if (!porData[d]) {
         porData[d] = {
@@ -299,7 +312,7 @@ export function getPeriodo(tipo: string): PeriodoFiltro {
   const dataFim = new Date(hoje);
   dataFim.setHours(23, 59, 59, 999);
 
-  let dataInicio = new Date(hoje);
+  const dataInicio = new Date(hoje);
 
   switch (tipo) {
     case 'hoje':

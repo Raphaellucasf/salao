@@ -1,84 +1,59 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/api-auth';
+import { apiError } from '@/lib/api-response';
+import { getRequestId } from '@/lib/observability';
+import { asBoundedText, asMoney, isIsoDate, parseJsonObject } from '@/lib/validation';
+import { createTransaction, listTransactions } from '@/services/transactions';
 
-// POST - Registrar transação financeira
+const METHODS = new Set(['dinheiro', 'pix', 'cartao_credito', 'cartao_debito']);
+
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request);
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await request.json();
-    const {
-      unit_id,
-      appointment_id,
-      professional_id,
-      type, // 'income', 'expense', 'commission'
-      amount,
-      description,
-      payment_method
-    } = body;
-
-    // Validação
-    if (!unit_id || !type || !amount || !description || !payment_method) {
-      return NextResponse.json(
-        { error: 'Campos obrigatórios faltando' },
-        { status: 400 }
-      );
+    const body = await parseJsonObject(request);
+    const rawType = body.type;
+    const type = rawType === 'income' ? 'receita' : rawType === 'expense' ? 'despesa' : rawType;
+    const amount = asMoney(body.amount);
+    const description = asBoundedText(body.description, 500);
+    const method = asBoundedText(body.payment_method, 40);
+    if ((type !== 'receita' && type !== 'despesa') || !amount || !description || !method || !METHODS.has(method)) {
+      return apiError('INVALID_INPUT', 'Dados da transação inválidos', 400, requestId);
     }
-
-    const { data, error } = await supabase
-      .from('transacoes')
-      .insert({
+    const result = await createTransaction(
+      { adminId: auth.id, unitId: auth.unitId, requestId, route: '/api/transactions' },
+      {
         tipo: type,
         valor: amount,
         descricao: description,
-        metodo: payment_method,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ transaction: data }, { status: 201 });
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        categoria: asBoundedText(body.category, 100) ?? 'Outros',
+        metodo: method,
+        data: new Date().toISOString().slice(0, 10),
+      },
+    );
+    if (!result.ok) return apiError(result.code, result.message, result.status, requestId);
+    return NextResponse.json({ transaction: result.data }, { status: 201 });
+  } catch {
+    return apiError('INVALID_INPUT', 'Payload da transação inválido', 400, requestId);
   }
 }
 
-// GET - Listar transações
 export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const unitId = searchParams.get('unit_id');
-    const type = searchParams.get('type');
-    const startDate = searchParams.get('start_date');
-    const endDate = searchParams.get('end_date');
-
-    let query = supabase
-      .from('transacoes')
-      .select('*')
-      .order('data', { ascending: false });
-
-    if (type) {
-      query = query.eq('tipo', type);
-    }
-
-    if (startDate) {
-      query = query.gte('data', startDate);
-    }
-
-    if (endDate) {
-      query = query.lte('data', endDate);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ transactions: data });
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  const requestId = getRequestId(request);
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
+  const params = request.nextUrl.searchParams;
+  const startDate = params.get('start_date');
+  const endDate = params.get('end_date');
+  if ((startDate && !isIsoDate(startDate)) || (endDate && !isIsoDate(endDate))) {
+    return apiError('INVALID_INPUT', 'Intervalo de datas inválido', 400, requestId);
   }
+  const result = await listTransactions(
+    { adminId: auth.id, unitId: auth.unitId, requestId, route: '/api/transactions' },
+    { type: params.get('type'), startDate, endDate },
+  );
+  if (!result.ok) return apiError(result.code, result.message, result.status, requestId);
+  return NextResponse.json({ transactions: result.data });
 }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -200,7 +199,7 @@ export default function GrupoServicoModal({ isOpen, onClose, grupo, onSave }: Gr
       isOpen={isOpen}
       onClose={onClose}
       title={grupo ? 'Editar Grupo de Serviços' : 'Novo Grupo de Serviços'}
-      size="medium"
+      size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
@@ -370,7 +369,7 @@ export default function GrupoServicoModal({ isOpen, onClose, grupo, onSave }: Gr
               <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-4 text-center text-sm text-neutral-500">
                 Nenhum serviço vinculado a este grupo ainda.
                 <br />
-                <span className="text-xs">Adicione serviços na aba "Serviços"</span>
+                <span className="text-xs">Adicione serviços na aba &quot;Serviços&quot;</span>
               </div>
             )}
           </div>

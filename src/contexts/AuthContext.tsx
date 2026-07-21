@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (event) => {
         // Só reage ao logout — tudo mais é tratado pelo loadUser no mount
         if (event === 'SIGNED_OUT') {
           setUser(null);

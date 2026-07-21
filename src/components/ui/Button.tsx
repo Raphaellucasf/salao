@@ -9,20 +9,20 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className = '', variant = 'primary', size = 'md', isLoading = false, disabled, children, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+    const baseStyles = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl font-semibold transition-[background-color,border-color,color,box-shadow,transform] duration-200 focus:outline-none disabled:pointer-events-none disabled:opacity-50 active:translate-y-px';
     
     const variants = {
-      primary: 'bg-neutral-900 text-white hover:bg-neutral-800 focus:ring-neutral-700 shadow-sm',
-      secondary: 'bg-neutral-200 text-neutral-900 hover:bg-neutral-300 focus:ring-neutral-500',
-      accent: 'bg-accent-500 text-neutral-900 hover:bg-accent-600 focus:ring-accent-500 shadow-sm',
-      outline: 'border-2 border-neutral-900 text-neutral-900 hover:bg-neutral-100 focus:ring-neutral-700',
-      ghost: 'text-neutral-900 hover:bg-neutral-200 focus:ring-neutral-500',
+      primary: 'bg-primary-800 text-white shadow-card hover:bg-primary-900 hover:shadow-luxury',
+      secondary: 'border border-neutral-200 bg-white text-neutral-800 shadow-card hover:border-neutral-300 hover:bg-neutral-50',
+      accent: 'bg-accent-600 text-white shadow-card hover:bg-accent-700 hover:shadow-luxury',
+      outline: 'border border-primary-300 bg-transparent text-primary-800 hover:border-primary-500 hover:bg-primary-50',
+      ghost: 'bg-transparent text-neutral-700 hover:bg-neutral-900/5 hover:text-neutral-950',
     };
     
     const sizes = {
-      sm: 'px-3 py-1.5 text-sm',
-      md: 'px-5 py-2.5 text-base',
-      lg: 'px-6 py-3 text-lg',
+      sm: 'min-h-9 px-3.5 py-2 text-sm',
+      md: 'px-5 py-2.5 text-sm',
+      lg: 'min-h-12 px-6 py-3 text-base',
     };
 
     return (
@@ -33,7 +33,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {isLoading ? (
-          <svg className="animate-spin -ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg className="h-5 w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>

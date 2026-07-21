@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,6 +7,21 @@ import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Search, Calendar, User, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import type { Database, Json } from '@/types/supabase';
+
+type AgendaResult = Database['public']['Views']['vw_agendamentos_completos']['Row'];
+
+function serviceText(value: Json | null): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(serviceText).filter(Boolean).join(', ');
+  if (typeof value === 'object') {
+    const name = value.nome;
+    if (typeof name === 'string') return name;
+    return Object.values(value).map((item) => serviceText(item ?? null)).filter(Boolean).join(', ');
+  }
+  return '';
+}
 
 interface BuscarAgendaModalProps {
   isOpen: boolean;
@@ -18,7 +32,7 @@ export default function BuscarAgendaModal({ isOpen, onClose }: BuscarAgendaModal
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchType, setSearchType] = useState<'cliente' | 'profissional' | 'servico'>('cliente');
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<AgendaResult[]>([]);
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
 
@@ -31,37 +45,31 @@ export default function BuscarAgendaModal({ isOpen, onClose }: BuscarAgendaModal
     setLoading(true);
     try {
       let query = supabase
-        .from('appointments')
-        .select(`
-          *,
-          clientes (id, nome, telefone),
-          usuarios (id, nome),
-          servicos (id, nome)
-        `);
-
-      // Filtros por tipo
-      if (searchType === 'cliente') {
-        query = query.ilike('clientes.nome', `%${searchTerm}%`);
-      } else if (searchType === 'profissional') {
-        query = query.ilike('usuarios.nome', `%${searchTerm}%`);
-      } else if (searchType === 'servico') {
-        query = query.ilike('servicos.nome', `%${searchTerm}%`);
-      }
+        .from('vw_agendamentos_completos')
+        .select('*');
 
       // Filtros de data
       if (dataInicio) {
-        query = query.gte('data_hora', dataInicio);
+        query = query.gte('data_agendamento', dataInicio);
       }
       if (dataFim) {
-        query = query.lte('data_hora', dataFim);
+        query = query.lte('data_agendamento', dataFim);
       }
 
-      query = query.order('data_hora', { ascending: false }).limit(50);
+      query = query.order('data_agendamento', { ascending: false }).limit(500);
 
       const { data, error } = await query;
 
       if (error) throw error;
-      setResults(data || []);
+      const normalized = searchTerm.trim().toLocaleLowerCase('pt-BR');
+      setResults((data ?? []).filter((row) => {
+        const candidate = searchType === 'cliente'
+          ? row.cliente_nome
+          : searchType === 'profissional'
+            ? row.profissional_nome
+            : serviceText(row.servicos);
+        return candidate?.toLocaleLowerCase('pt-BR').includes(normalized) ?? false;
+      }).slice(0, 50));
     } catch (err) {
       console.error('Erro na busca:', err);
     } finally {
@@ -98,7 +106,7 @@ export default function BuscarAgendaModal({ isOpen, onClose }: BuscarAgendaModal
               <label className="block text-sm font-medium text-neutral-700 mb-2">Buscar por</label>
               <select
                 value={searchType}
-                onChange={(e) => setSearchType(e.target.value as any)}
+                onChange={(e) => setSearchType(e.target.value as typeof searchType)}
                 className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary-500"
               >
                 <option value="cliente">Cliente</option>
@@ -172,32 +180,31 @@ export default function BuscarAgendaModal({ isOpen, onClose }: BuscarAgendaModal
                       <div className="flex items-center gap-2 mb-1">
                         <User className="w-4 h-4 text-neutral-500" />
                         <span className="font-semibold text-neutral-900">
-                          {agendamento.clientes?.nome || 'Cliente não encontrado'}
+                          {agendamento.cliente_nome || 'Cliente não encontrado'}
                         </span>
                       </div>
                       <p className="text-sm text-neutral-600">
-                        {agendamento.servicos?.nome || 'Serviço não especificado'}
+                        {serviceText(agendamento.servicos) || 'Serviço não especificado'}
                       </p>
                     </div>
-                    {getStatusBadge(agendamento.status)}
+                    {getStatusBadge(agendamento.status ?? 'pendente')}
                   </div>
 
                   <div className="flex items-center gap-4 text-sm text-neutral-600">
                     <span className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
-                      {new Date(agendamento.data_hora).toLocaleDateString('pt-BR')}
+                      {agendamento.data_agendamento
+                        ? new Date(`${agendamento.data_agendamento}T00:00:00`).toLocaleDateString('pt-BR')
+                        : 'Data não informada'}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      {new Date(agendamento.data_hora).toLocaleTimeString('pt-BR', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
+                      {agendamento.hora_inicio?.slice(0, 5) || '--:--'}
                     </span>
-                    {agendamento.usuarios && (
+                    {agendamento.profissional_nome && (
                       <span className="flex items-center gap-1">
                         <User className="w-4 h-4" />
-                        {agendamento.usuarios.nome}
+                        {agendamento.profissional_nome}
                       </span>
                     )}
                   </div>

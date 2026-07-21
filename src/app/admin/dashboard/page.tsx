@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissoes } from '@/hooks/usePermissoes';
-import { Card } from '@/components/ui';
+import { Card, PageHeader, StatCard } from '@/components/ui';
 import { 
   Calendar, 
   DollarSign, 
@@ -14,7 +14,8 @@ import {
   AlertCircle,
   ClipboardList,
   Loader2,
-  UserCheck
+  UserCheck,
+  LayoutDashboard
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -52,7 +53,6 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const { podeAcessar } = usePermissoes();
   const verFinanceiro = podeAcessar('financeiro');
-  const verRelatorios = podeAcessar('relatorios');
 
   const [loading, setLoading] = useState(true);
   const [agendamentosHoje, setAgendamentosHoje] = useState(0);
@@ -323,7 +323,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="app-page space-y-6">
       <ClienteModal
         isOpen={clienteModalOpen}
         onClose={() => { setClienteModalOpen(false); setClienteEditando(null); }}
@@ -332,35 +332,25 @@ export default function AdminDashboard() {
         onSave={() => { setClienteModalOpen(false); setClienteEditando(null); reloadPendentes(); }}
       />
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-neutral-900">
-            Olá, {user?.full_name?.split(' ')[0] || 'Admin'} 👋
-          </h1>
-          <p className="text-neutral-600 mt-1">
-            Aqui está um resumo do que está acontecendo hoje
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm text-neutral-500">Hoje</p>
-          <p className="text-lg font-semibold text-neutral-900">
-            {new Date().toLocaleDateString('pt-BR', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long' 
-            })}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Painel do dia"
+        title={`Olá, ${user?.full_name?.split(' ')[0] || 'Admin'}`}
+        description="Acompanhe a agenda, os atendimentos e os principais indicadores de hoje."
+        icon={LayoutDashboard}
+        meta={(
+          <span className="inline-flex rounded-full border border-neutral-200 bg-white px-3 py-1.5 font-medium capitalize text-neutral-600 shadow-card">
+            {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </span>
+        )}
+      />
 
       {/* Quick Access Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Link href="/admin/agenda">
-          <Card padding="lg" hover className="cursor-pointer">
+          <Card padding="md" hover className="cursor-pointer">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-blue-600" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-sky-100 bg-sky-50">
+                <Calendar className="h-5 w-5 text-sky-700" />
               </div>
               <div>
                 <h3 className="font-semibold text-neutral-900">Ver Agenda</h3>
@@ -371,10 +361,10 @@ export default function AdminDashboard() {
         </Link>
 
         <Link href="/admin/clientes">
-          <Card padding="lg" hover className="cursor-pointer">
+          <Card padding="md" hover className="cursor-pointer">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-600" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary-100 bg-primary-50">
+                <Users className="h-5 w-5 text-primary-700" />
               </div>
               <div>
                 <h3 className="font-semibold text-neutral-900">Clientes</h3>
@@ -385,10 +375,10 @@ export default function AdminDashboard() {
         </Link>
 
         <Link href="/admin/comandas">
-          <Card padding="lg" hover className="cursor-pointer">
+          <Card padding="md" hover className="cursor-pointer">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-accent-100 rounded-xl flex items-center justify-center">
-                <ClipboardList className="w-6 h-6 text-accent-600" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-accent-100 bg-accent-50">
+                <ClipboardList className="h-5 w-5 text-accent-700" />
               </div>
               <div>
                 <h3 className="font-semibold text-neutral-900">Comandas</h3>
@@ -400,10 +390,10 @@ export default function AdminDashboard() {
 
         {verFinanceiro && (
           <Link href="/admin/financeiro">
-            <Card padding="lg" hover className="cursor-pointer">
+            <Card padding="md" hover className="cursor-pointer">
               <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-600" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50">
+                  <DollarSign className="h-5 w-5 text-emerald-700" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-neutral-900">Financeiro</h3>
@@ -533,69 +523,46 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card padding="lg" hover>
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm text-neutral-600">Agendamentos Hoje</p>
-              <p className="text-2xl font-bold text-neutral-900 mt-1">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : agendamentosHoje}
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-              <Calendar className="w-6 h-6 text-white" />
-            </div>
+      {/* Indicadores */}
+      <section aria-labelledby="indicadores-title">
+        <div className="mb-4 flex items-end justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-700">Indicadores</p>
+            <h2 id="indicadores-title" className="mt-1 text-xl font-semibold tracking-[-0.025em] text-neutral-950">Resumo da operação</h2>
           </div>
-        </Card>
-
-        {verFinanceiro && (
-          <Card padding="lg" hover>
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <p className="text-sm text-neutral-600">Faturamento Hoje</p>
-                <p className="text-2xl font-bold text-neutral-900 mt-1">
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(faturamentoHoje)}
-                </p>
-                <p className="text-xs text-neutral-500 mt-1">Serviços concluídos</p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-green-500 to-green-600 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </Card>
-        )}
-
-        <Card padding="lg" hover>
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm text-neutral-600">Novos Clientes Hoje</p>
-              <p className="text-2xl font-bold text-neutral-900 mt-1">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : novosClientesHoje}
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-linear-to-br from-purple-500 to-purple-600 flex items-center justify-center">
-              <Users className="w-6 h-6 text-white" />
-            </div>
-          </div>
-        </Card>
-
-        {verFinanceiro && (
-          <Card padding="lg" hover>
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <p className="text-sm text-neutral-600">Faturamento do Mês</p>
-                <p className="text-2xl font-bold text-neutral-900 mt-1">
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatCurrency(faturamentoMes)}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-linear-to-br from-accent-500 to-accent-600 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </Card>
-        )}
-      </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Agendamentos hoje"
+            value={loading ? <Loader2 className="h-5 w-5 animate-spin" /> : agendamentosHoje}
+            icon={Calendar}
+            tone="info"
+          />
+          {verFinanceiro && (
+            <StatCard
+              label="Faturamento hoje"
+              value={loading ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(faturamentoHoje)}
+              helper="Serviços concluídos"
+              icon={DollarSign}
+              tone="success"
+            />
+          )}
+          <StatCard
+            label="Novos clientes hoje"
+            value={loading ? <Loader2 className="h-5 w-5 animate-spin" /> : novosClientesHoje}
+            icon={Users}
+            tone="primary"
+          />
+          {verFinanceiro && (
+            <StatCard
+              label="Faturamento do mês"
+              value={loading ? <Loader2 className="h-5 w-5 animate-spin" /> : formatCurrency(faturamentoMes)}
+              icon={TrendingUp}
+              tone="accent"
+            />
+          )}
+        </div>
+      </section>
 
       {/* Comissões por Profissional — apenas para quem tem acesso financeiro */}
       {verFinanceiro && comissoesMes.length > 0 && (

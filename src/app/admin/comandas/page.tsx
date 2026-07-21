@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Plus, Receipt, DollarSign, X, Edit } from 'lucide-react';
+import { Plus, Receipt, DollarSign, X, Edit, Eye } from 'lucide-react';
 import ComandaModal from '@/components/modals/ComandaModal';
 import ComandaViewDrawer from '@/components/modals/ComandaViewDrawer';
 import { supabase } from '@/lib/supabase';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcuts';
+import ClienteQuickViewModal from '@/components/modals/ClienteQuickViewModal';
 
 export default function ComandasPage() {
   const [comandas, setComandas] = useState<any[]>([]);
@@ -20,6 +21,7 @@ export default function ComandasPage() {
   // Drawer para visualizar/fechar comanda com fluxo completo (pagamento, transação, comissões)
   const [viewDrawerOpen, setViewDrawerOpen] = useState(false);
   const [viewComandaId, setViewComandaId] = useState<number | undefined>(undefined);
+  const [quickClientId, setQuickClientId] = useState<number | undefined>(undefined);
 
   // Atalho F8 para abrir nova comanda
   useKeyboardShortcut('F8', () => {
@@ -64,14 +66,12 @@ export default function ComandasPage() {
   };
 
   const handleCancelarComanda = async (comanda: any) => {
-    if (!confirm(`Cancelar comanda #${comanda.numero_comanda}? Ela ficará no histórico como cancelada.`)) return;
+    if (!confirm(`Excluir comanda aberta #${comanda.numero_comanda} e restaurar seus saldos?`)) return;
 
     try {
-      const { error } = await (supabase as any)
-        .from('comandas')
-        .update({ status: 'cancelada' })
-        .eq('id', comanda.id);
-      if (error) throw error;
+      const response = await fetch(`/api/admin/comandas?comanda_id=${comanda.id}`, { method: 'DELETE' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
       loadComandas();
     } catch (error: any) {
       alert('Erro ao cancelar comanda: ' + error.message);
@@ -128,6 +128,11 @@ export default function ComandasPage() {
           const comanda = comandas.find(c => c.id === viewComandaId);
           if (comanda) handleEditComanda(comanda);
         }}
+      />
+      <ClienteQuickViewModal
+        isOpen={quickClientId !== undefined}
+        clienteId={quickClientId}
+        onClose={() => setQuickClientId(undefined)}
       />
 
       {/* Header */}
@@ -229,9 +234,22 @@ export default function ComandasPage() {
                     <h3 className="text-lg font-bold text-neutral-900">
                       Comanda #{comanda.numero_comanda}
                     </h3>
-                    <p className="text-sm text-neutral-600">
-                      {comanda.cliente?.nome || 'Cliente não informado'}
-                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <p className="text-sm text-neutral-600">
+                        {comanda.cliente?.nome || 'Cliente não informado'}
+                      </p>
+                      {comanda.cliente_id && (
+                        <button
+                          type="button"
+                          onClick={() => setQuickClientId(Number(comanda.cliente_id))}
+                          className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary-200 text-primary-700 transition hover:bg-primary-50"
+                          aria-label={`Ver detalhes de ${comanda.cliente?.nome || 'cliente'}`}
+                          title="Ver detalhes do cliente"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {getStatusBadge(comanda.status)}
                 </div>

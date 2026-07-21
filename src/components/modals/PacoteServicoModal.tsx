@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,8 +5,7 @@ import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
-import { DEFAULT_UNIT_ID } from '@/services/caixa';
-import { Box, DollarSign, Clock, Scissors, Plus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface PacoteServicoModalProps {
   isOpen: boolean;
@@ -221,7 +219,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
       isOpen={isOpen}
       onClose={onClose}
       title={pacote ? 'Editar Pacote de Serviços' : 'Novo Pacote de Serviços'}
-      size="large"
+      size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (

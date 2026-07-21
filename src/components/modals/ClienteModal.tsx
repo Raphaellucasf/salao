@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -187,12 +186,13 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave, titulo 
             </h3>
             <div className="space-y-2">
               {pacotesAtivos.map((pacote) => {
-                const disponivel = pacote.sessoes_total - pacote.sessoes_consumidas;
-                const perc = Math.round((pacote.sessoes_consumidas / pacote.sessoes_total) * 100);
+                const consumidas = pacote.sessoes_total - pacote.sessoes_restantes;
+                const disponivel = pacote.sessoes_restantes;
+                const perc = pacote.sessoes_total > 0 ? Math.round((consumidas / pacote.sessoes_total) * 100) : 0;
                 return (
                   <div key={pacote.id} className="bg-neutral-50 p-3 rounded-lg border border-neutral-200">
                     <div className="flex justify-between items-center mb-1">
-                      <span className="font-medium text-neutral-800 text-sm">{pacote.servico?.nome || 'Serviço'}</span>
+                      <span className="font-medium text-neutral-800 text-sm">{pacote.servico_nome || 'Serviço'}</span>
                       <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
                         {disponivel} sessões restando
                       </span>
@@ -201,7 +201,7 @@ export default function ClienteModal({ isOpen, onClose, cliente, onSave, titulo 
                       <div className="bg-primary-500 h-1.5 rounded-full transition-all" style={{ width: `${perc}%` }}></div>
                     </div>
                     <div className="flex justify-between mt-1">
-                      <span className="text-[10px] text-neutral-500">Usadas: {pacote.sessoes_consumidas}</span>
+                      <span className="text-[10px] text-neutral-500">Usadas: {consumidas}</span>
                       <span className="text-[10px] text-neutral-500">Total: {pacote.sessoes_total}</span>
                     </div>
                   </div>

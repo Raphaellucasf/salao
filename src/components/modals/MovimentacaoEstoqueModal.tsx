@@ -1,12 +1,9 @@
-// @ts-nocheck
 'use client';
 
 import { useState } from 'react';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { supabase } from '@/lib/supabase';
 import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 
 interface MovimentacaoModalProps {
@@ -58,34 +55,19 @@ export default function MovimentacaoModal({ isOpen, onClose, produto, onSave }: 
         throw new Error('Quantidade maior que o estoque disponível');
       }
 
-      // Calcular quantidade após movimentação
-      const novaQuantidade = isEntrada
-        ? quantidadeAtual + formData.quantidade
-        : quantidadeAtual - formData.quantidade;
-
-      // 1. Inserir movimentação diretamente na tabela
-      const { error: movError } = await supabase
-        .from('estoque_movimentacoes')
-        .insert({
+      const response = await fetch('/api/admin/estoque', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           produto_id: produto.id,
           tipo: formData.tipo,
-          quantidade: isEntrada ? formData.quantidade : -formData.quantidade,
-          quantidade_anterior: quantidadeAtual,
-          quantidade_atual: novaQuantidade,
+          quantidade: formData.quantidade,
           valor_unitario: formData.valor_unitario,
-          valor_total: formData.valor_unitario * formData.quantidade,
           motivo: [formData.motivo.trim(), formData.documento.trim()].filter(Boolean).join(' | ') || null,
-        });
-
-      if (movError) throw movError;
-
-      // 2. Atualizar quantidade do produto
-      const { error: prodError } = await supabase
-        .from('produtos')
-        .update({ quantidade: novaQuantidade })
-        .eq('id', produto.id);
-
-      if (prodError) throw prodError;
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
 
       onSave();
       onClose();
@@ -115,7 +97,7 @@ export default function MovimentacaoModal({ isOpen, onClose, produto, onSave }: 
       isOpen={isOpen}
       onClose={onClose}
       title={`Movimentar Estoque - ${produto.nome}`}
-      size="medium"
+      size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (

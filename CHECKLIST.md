@@ -93,7 +93,8 @@
 ### Variáveis de Ambiente
 - [ ] `.env.local` - Configurado com:
   - [ ] `NEXT_PUBLIC_SUPABASE_URL`
-  - [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - [ ] `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+  - [ ] `SUPABASE_SECRET_KEY` apenas no backend
 
 ---
 
@@ -112,12 +113,12 @@
 
 ### Testes Manuais
 - [ ] **Login Admin**
-  - [ ] Email: dimas@salaodimas.com / Senha: Dimas@2024
+  - [ ] Definir `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` localmente
   - [ ] Redirecionou para `/admin`
   - [ ] Sidebar mostra TODOS os menus
 
 - [ ] **Login Professional**
-  - [ ] Email: joao@salaodimas.com / Senha: Joao@2024
+  - [ ] Definir `E2E_PROFESSIONAL_EMAIL` / `E2E_PROFESSIONAL_PASSWORD` localmente
   - [ ] Redirecionou para `/profissionais`
   - [ ] Sidebar NÃO mostra Financeiro, Relatórios, Estoque
 

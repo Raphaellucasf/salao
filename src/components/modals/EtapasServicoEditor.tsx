@@ -1,7 +1,5 @@
-// @ts-nocheck
 'use client';
 
-import { useState } from 'react';
 import { Plus, Trash2, GripVertical, Clock } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -80,7 +78,6 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
     return etapas.reduce((total, etapa) => total + (etapa.duracao_minutos || 0), 0);
   };
 
-  const todosAtribuidos = etapas.every(e => e.nome && e.nome.trim() !== '');
   const duracaoTotal = calcularDuracaoTotal();
 
   return (
@@ -208,7 +205,7 @@ export default function EtapasServicoEditor({ etapas, onChange }: EtapasServicoE
           <div className="text-center py-8 text-neutral-400 border-2 border-dashed border-neutral-200 rounded-lg">
             <Plus className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">Nenhuma etapa adicionada</p>
-            <p className="text-xs mt-1">Clique em "Adicionar Etapa" para começar</p>
+            <p className="text-xs mt-1">Clique em &quot;Adicionar Etapa&quot; para começar</p>
           </div>
         )}
       </div>

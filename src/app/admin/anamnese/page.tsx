@@ -7,7 +7,6 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import AnamneseModal from '@/components/modals/AnamneseModal';
-import { supabase } from '@/lib/supabase';
 
 type TipoAnamnese = 'capilar' | 'corporal_facial' | 'podologica' | 'micropigmentacao';
 
@@ -38,26 +37,11 @@ export default function AnamnesePage() {
     try {
       setLoading(true);
       
-      const [anamnesesData, clientesData] = await Promise.all([
-        supabase
-          .from('anamneses')
-          .select(`
-            *,
-            clientes (id, nome, telefone, email),
-            profissionais (id, nome)
-          `)
-          .order('data_anamnese', { ascending: false }),
-        supabase
-          .from('clientes')
-          .select('id, nome, telefone, email')
-          .order('nome')
-      ]);
-
-      if (anamnesesData.error) throw anamnesesData.error;
-      if (clientesData.error) throw clientesData.error;
-
-      setAnamneses(anamnesesData.data || []);
-      setClientes(clientesData.data || []);
+      const response = await fetch('/api/admin/anamneses', { cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Erro ao carregar dados clínicos');
+      setAnamneses(result.anamneses || []);
+      setClientes(result.clientes || []);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -83,12 +67,9 @@ export default function AnamnesePage() {
     if (!confirm('Deseja realmente excluir esta anamnese?')) return;
 
     try {
-      const { error } = await supabase
-        .from('anamneses')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      const response = await fetch(`/api/admin/anamneses?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Erro ao excluir anamnese');
       loadData();
     } catch (error) {
       console.error('Erro ao excluir:', error);
@@ -281,6 +262,7 @@ export default function AnamnesePage() {
           clienteId={clienteSelecionado}
           tipo={modalTipo}
           anamnese={anamneseSelecionada}
+          cliente={clientes.find((item) => item.id === clienteSelecionado) ?? null}
           onSave={loadData}
         />
       )}

@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -51,7 +50,12 @@ export default function ConsumoInternoModal({ isOpen, onClose }: ConsumoInternoM
         .order('nome');
 
       if (error) throw error;
-      setProdutos(data || []);
+      setProdutos((data ?? []).map((produto) => ({
+        ...produto,
+        quantidade: produto.quantidade ?? 0,
+        unidade_medida: produto.unidade_medida ?? 'un',
+        quantidade_minima: produto.quantidade_minima ?? 0,
+      })));
     } catch (err: any) {
       toast.error('Erro ao carregar produtos: ' + (err.message || 'Erro desconhecido'));
     } finally {
@@ -97,28 +101,19 @@ export default function ConsumoInternoModal({ isOpen, onClose }: ConsumoInternoM
 
     setLoading(true);
     try {
-      // 1. Inserir movimentacao de estoque com quantidade negativa (saida)
-      const { error: movError } = await supabase
-        .from('estoque_movimentacoes')
-        .insert({
+      const response = await fetch('/api/admin/estoque', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           produto_id: produtoSelecionado.id,
           tipo: 'uso_interno',
-          quantidade: -quantidade,
+          quantidade,
+          valor_unitario: 0,
           motivo: motivo.trim() || null,
-          data_movimentacao: new Date().toISOString(),
-        });
-
-      if (movError) throw movError;
-
-      // 2. Atualizar quantidade do produto subtraindo o consumo
-      const { error: prodError } = await supabase
-        .from('produtos')
-        .update({
-          quantidade: (produtoSelecionado.quantidade || 0) - quantidade,
-        })
-        .eq('id', produtoSelecionado.id);
-
-      if (prodError) throw prodError;
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
 
       toast.success(
         `Consumo registrado! ${quantidade} ${produtoSelecionado.unidade_medida} de "${produtoSelecionado.nome}" baixado do estoque.`

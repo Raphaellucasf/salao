@@ -1,23 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { supabase } from '@/lib/supabase';
 import { Trash2, RotateCcw, User, Package, Calendar, FileText } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface CadastroExcluido {
   id: string;
   tipo_cadastro: string;
-  dados_originais: any;
-  motivo_exclusao?: string;
-  data_exclusao: string;
-  usuario_exclusao_id?: string;
-  pode_recuperar: boolean;
-  data_expiracao?: string;
-  dias_restantes?: number;
+  dados_originais: Record<string, unknown>;
+  motivo_exclusao: string | null;
+  data_exclusao: string | null;
+  usuario_exclusao_id: string | null;
+  pode_recuperar: boolean | null;
+  data_expiracao: string | null;
+  dias_restantes: number | null;
+}
+
+function getOriginalName(data: Record<string, unknown>): string {
+  return typeof data.nome === 'string' && data.nome.trim() ? data.nome : 'Nome não disponível';
+}
+
+async function getResponseError(response: Response, fallback: string): Promise<string> {
+  const body: unknown = await response.json().catch(() => null);
+  if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string') {
+    return body.error;
+  }
+  return fallback;
 }
 
 export default function CadastrosExcluidosPage() {
@@ -26,23 +38,15 @@ export default function CadastrosExcluidosPage() {
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    loadCadastrosExcluidos();
-  }, []);
-
-  const loadCadastrosExcluidos = async () => {
+  const loadCadastrosExcluidos = useCallback(async () => {
     try {
       setLoading(true);
+      const response = await fetch('/api/admin/cadastros-excluidos', { cache: 'no-store' });
+      if (!response.ok) throw new Error(await getResponseError(response, 'Falha ao carregar cadastros'));
+      const data = await response.json() as Omit<CadastroExcluido, 'dias_restantes'>[];
 
-      const { data, error } = await supabase
-        .from('cadastros_excluidos')
-        .select('*')
-        .order('data_exclusao', { ascending: false });
-
-      if (error) throw error;
-
-      const cadastrosComDias = (data || []).map((cadastro: any) => {
-        let diasRestantes = null;
+      const cadastrosComDias = data.map((cadastro) => {
+        let diasRestantes: number | null = null;
         if (cadastro.data_expiracao) {
           const hoje = new Date();
           const expiracao = new Date(cadastro.data_expiracao);
@@ -62,50 +66,28 @@ export default function CadastrosExcluidosPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadCadastrosExcluidos();
+  }, [loadCadastrosExcluidos]);
 
   const recuperarCadastro = async (cadastro: CadastroExcluido) => {
     if (!confirm(`Deseja recuperar este ${cadastro.tipo_cadastro}?`)) return;
 
-    const TABELA_POR_TIPO: Record<string, string> = {
-      cliente: 'clientes',
-      produto: 'produtos',
-      servico: 'servicos',
-      agendamento: 'agendamentos',
-      profissional: 'profissionais',
-    };
-
-    const tabela = TABELA_POR_TIPO[cadastro.tipo_cadastro];
-    if (!tabela) {
-      alert(`Tipo "${cadastro.tipo_cadastro}" não tem recuperação automática implementada.`);
-      return;
-    }
-
     try {
-      // Limpa campos que não pertencem à tabela de destino
-      const dadosParaInserir = { ...cadastro.dados_originais };
-      delete dadosParaInserir.deleted_at;
-
-      // Upsert: se o ID já existir na tabela, atualiza; senão, insere
-      const { error: insertError } = await supabase
-        .from(tabela)
-        .upsert(dadosParaInserir, { onConflict: 'id' });
-
-      if (insertError) throw insertError;
-
-      // Só remove de cadastros_excluidos após reinserção bem-sucedida
-      const { error: deleteError } = await supabase
-        .from('cadastros_excluidos')
-        .delete()
-        .eq('id', cadastro.id);
-
-      if (deleteError) throw deleteError;
+      const response = await fetch('/api/admin/cadastros-excluidos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cadastro.id }),
+      });
+      if (!response.ok) throw new Error(await getResponseError(response, 'Falha ao recuperar cadastro'));
 
       alert('Cadastro recuperado com sucesso!');
-      loadCadastrosExcluidos();
-    } catch (error: any) {
+      await loadCadastrosExcluidos();
+    } catch (error: unknown) {
       console.error('Erro ao recuperar cadastro:', error);
-      alert(`Erro ao recuperar cadastro: ${error.message || 'Erro desconhecido'}`);
+      alert(error instanceof Error ? error.message : 'Erro ao recuperar cadastro');
     }
   };
 
@@ -113,18 +95,16 @@ export default function CadastrosExcluidosPage() {
     if (!confirm(`Deseja excluir DEFINITIVAMENTE este ${cadastro.tipo_cadastro}? Esta ação não pode ser desfeita!`)) return;
 
     try {
-      const { error } = await supabase
-        .from('cadastros_excluidos')
-        .delete()
-        .eq('id', cadastro.id);
-
-      if (error) throw error;
+      const response = await fetch(`/api/admin/cadastros-excluidos?id=${encodeURIComponent(cadastro.id)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error(await getResponseError(response, 'Falha ao excluir cadastro'));
 
       alert('Cadastro excluído definitivamente');
-      loadCadastrosExcluidos();
-    } catch (error) {
+      await loadCadastrosExcluidos();
+    } catch (error: unknown) {
       console.error('Erro ao excluir:', error);
-      alert('Erro ao excluir cadastro');
+      alert(error instanceof Error ? error.message : 'Erro ao excluir cadastro');
     }
   };
 
@@ -138,7 +118,7 @@ export default function CadastrosExcluidosPage() {
     if (search) {
       const dados = cadastro.dados_originais;
       const searchLower = search.toLowerCase();
-      const nome = dados?.nome?.toLowerCase() || '';
+      const nome = typeof dados.nome === 'string' ? dados.nome.toLowerCase() : '';
       const motivo = cadastro.motivo_exclusao?.toLowerCase() || '';
       
       if (!nome.includes(searchLower) && !motivo.includes(searchLower)) {
@@ -152,7 +132,7 @@ export default function CadastrosExcluidosPage() {
   const tiposDisponiveis = ['todos', ...new Set(cadastros.map(c => c.tipo_cadastro))];
 
   const getTipoIcon = (tipo: string) => {
-    const icons: Record<string, any> = {
+    const icons: Record<string, LucideIcon> = {
       cliente: User,
       produto: Package,
       servico: FileText,
@@ -217,8 +197,10 @@ export default function CadastrosExcluidosPage() {
       ) : (
         <div className="grid gap-4">
           {cadastrosFiltrados.map((cadastro) => {
-            const nome = cadastro.dados_originais?.nome || 'Nome não disponível';
-            const dataExclusao = new Date(cadastro.data_exclusao).toLocaleDateString('pt-BR');
+            const nome = getOriginalName(cadastro.dados_originais);
+            const dataExclusao = cadastro.data_exclusao
+              ? new Date(cadastro.data_exclusao).toLocaleDateString('pt-BR')
+              : 'Data não disponível';
             const isExpirado = cadastro.dias_restantes !== null && cadastro.dias_restantes !== undefined && cadastro.dias_restantes <= 0;
 
             return (

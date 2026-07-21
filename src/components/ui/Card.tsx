@@ -11,13 +11,13 @@ export function Card({ children, className = '', hover = false, padding = 'md', 
     none: '',
     sm: 'p-4',
     md: 'p-6',
-    lg: 'p-8',
+    lg: 'p-5 sm:p-8',
   };
 
   return (
     <div
-      className={`bg-white rounded-2xl shadow-card border border-neutral-100 ${
-        hover ? 'transition-shadow hover:shadow-soft cursor-pointer' : ''
+      className={`rounded-2xl border border-neutral-200/80 bg-white/95 shadow-card backdrop-blur-sm ${
+        hover ? 'transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-soft' : ''
       } ${paddingClasses[padding]} ${className}`}
       {...props}
     >
@@ -28,7 +28,7 @@ export function Card({ children, className = '', hover = false, padding = 'md', 
 
 export function CardHeader({ children, className = '', ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`border-b border-neutral-100 pb-4 mb-4 ${className}`} {...props}>
+    <div className={`mb-4 border-b border-neutral-100 pb-4 ${className}`} {...props}>
       {children}
     </div>
   );
@@ -36,7 +36,7 @@ export function CardHeader({ children, className = '', ...props }: React.HTMLAtt
 
 export function CardTitle({ children, className = '', ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={`text-xl font-semibold text-neutral-900 ${className}`} {...props}>
+    <h3 className={`text-lg font-semibold tracking-[-0.02em] text-neutral-950 ${className}`} {...props}>
       {children}
     </h3>
   );
@@ -44,7 +44,7 @@ export function CardTitle({ children, className = '', ...props }: React.HTMLAttr
 
 export function CardDescription({ children, className = '', ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={`text-sm text-neutral-500 mt-1 ${className}`} {...props}>
+    <p className={`mt-1 text-sm leading-6 text-neutral-500 ${className}`} {...props}>
       {children}
     </p>
   );

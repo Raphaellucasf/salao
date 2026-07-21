@@ -51,6 +51,8 @@ export default function ContaFixaModal({
 
   useEffect(() => {
     if (conta) {
+      // Reinicializa campos controlados ao alternar a conta editada.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNome(conta.nome);
       setValor(String(conta.valor));
       setVencimentoDia(conta.vencimento_dia != null ? String(conta.vencimento_dia) : '');

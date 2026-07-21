@@ -1,15 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, User, Phone, Calendar, Clock, Scissors, ShoppingBag, Package, MapPin, DollarSign, Lock, Percent, Plus } from 'lucide-react';
+import { X, User, Phone, Calendar, Clock, Scissors, ShoppingBag, Package, MapPin, DollarSign, Lock, Percent, Plus, Eye } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
-import { DEFAULT_UNIT_ID } from '@/services/caixa';
-import { registrarCompraPacote, debitarSessaoPorServico, verificarPacoteAtivo, debitarSessaoPacote } from '@/services/pacotes';
+import { verificarPacoteAtivo } from '@/services/pacotes';
 import type { PacoteAtivo } from '@/services/pacotes';
 import { toast } from 'sonner';
+import ClienteQuickViewModal from '@/components/modals/ClienteQuickViewModal';
 
 interface ComandaViewDrawerProps {
   isOpen: boolean;
@@ -27,12 +26,24 @@ interface ComissaoEntry {
   valor: number;
 }
 
+interface FormaPagamento {
+  id: string;
+  nome: string;
+  tipo: string;
+  bandeira: string | null;
+  permite_parcelamento: boolean | null;
+  max_parcelas: number | null;
+  min_valor_parcela: number | null;
+}
+
 export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, onDelete }: ComandaViewDrawerProps) {
-  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [comanda, setComanda] = useState<any>(null);
-  const [metodoPagamento, setMetodoPagamento] = useState('dinheiro');
+  const [metodoPagamento, setMetodoPagamento] = useState('');
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
+  const [parcelas, setParcelas] = useState(1);
   const [fechandoComanda, setFechandoComanda] = useState(false);
+  const [clientQuickViewOpen, setClientQuickViewOpen] = useState(false);
 
   // R6: estados para adição dinâmica de itens
   const [addItemMenuOpen, setAddItemMenuOpen] = useState(false);
@@ -49,14 +60,32 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
   const [desconto, setDesconto] = useState<number>(0);
   const [caixaFechado, setCaixaFechado] = useState(false);
 
-  const subtotalComanda = comanda?.comanda_itens && comanda.comanda_itens.length > 0
-    ? comanda.comanda_itens.reduce((sum: number, item: { valor_total?: string | number }) => sum + Number(item.valor_total || 0), 0)
-    : Number(comanda?.subtotal || comanda?.total || 0);
+  const subtotalComanda = (() => {
+    if (comanda?.comanda_itens && comanda.comanda_itens.length > 0) {
+      return comanda.comanda_itens.reduce(
+        (sum: number, item: { valor_total?: string | number }) => {
+          const v = Number(item.valor_total);
+          return sum + (isNaN(v) ? 0 : v);
+        }, 0,
+      );
+    }
+    const fallback = Number(comanda?.subtotal) || Number(comanda?.total) || 0;
+    return isNaN(fallback) ? 0 : fallback;
+  })();
+  const formaPagamentoSelecionada = formasPagamento.find(forma => forma.id === metodoPagamento);
+  const totalComDesconto = Math.max(0, subtotalComanda - desconto);
+  const limitePorValor = formaPagamentoSelecionada?.min_valor_parcela
+    ? Math.floor(totalComDesconto / Number(formaPagamentoSelecionada.min_valor_parcela))
+    : Number(formaPagamentoSelecionada?.max_parcelas || 1);
+  const maxParcelasDisponiveis = formaPagamentoSelecionada?.permite_parcelamento
+    ? Math.max(1, Math.min(Number(formaPagamentoSelecionada.max_parcelas || 1), limitePorValor))
+    : 1;
 
   useEffect(() => {
     if (isOpen && comandaId) {
       console.log('🔵 Drawer aberto com comandaId:', comandaId, 'Tipo:', typeof comandaId);
       loadComanda();
+      loadFormasPagamento();
     } else {
       console.log('🔴 Drawer sem comandaId:', { isOpen, comandaId });
       setComanda(null);
@@ -67,6 +96,29 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
       setItemQtd(1);
     }
   }, [isOpen, comandaId]);
+
+  useEffect(() => {
+    setParcelas(current => Math.min(current, maxParcelasDisponiveis));
+  }, [metodoPagamento, maxParcelasDisponiveis]);
+
+  const loadFormasPagamento = async () => {
+    const { data, error } = await supabase
+      .from('formas_pagamento')
+      .select('id,nome,tipo,bandeira,permite_parcelamento,max_parcelas,min_valor_parcela')
+      .eq('ativo', true)
+      .in('tipo', ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito'])
+      .order('ordem');
+    if (error) {
+      toast.error('Não foi possível carregar as formas de pagamento.');
+      setFormasPagamento([]);
+      setMetodoPagamento('');
+      return;
+    }
+    const options = (data || []) as FormaPagamento[];
+    setFormasPagamento(options);
+    setMetodoPagamento(current => options.some(option => option.id === current) ? current : (options[0]?.id || ''));
+    setParcelas(1);
+  };
 
   const loadComanda = async () => {
     try {
@@ -203,7 +255,8 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
       setComanda(comandaCompleta);
 
       // T-07: inicializar desconto e comissões sugeridas
-      setDesconto(Number(comandaData.desconto) || 0);
+      // Normalize invalid legacy values so the preview matches the API payload.
+      setDesconto(Math.max(0, Number(comandaData.desconto) || 0));
 
       const servicosTotal = (itensComEtapas ?? []).reduce(
         (s: number, i: any) => i.tipo === 'servico' ? s + (Number(i.valor_total) || 0) : s, 0,
@@ -332,48 +385,41 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
       } else if (addItemType === 'pacote') {
         const pac = pacotesAtivosDisponiveis.find((p) => p.id === selectedItemId);
         if (!pac) throw new Error('Pacote não encontrado');
-        // Debitar 1 sessão do pacote do cliente
-        const debitou = await debitarSessaoPacote(pac.id);
-        if (!debitou) {
-          toast.error('Não foi possível debitar sessão: saldo esgotado ou pacote inválido.');
-          setAddingItem(false);
-          return;
-        }
         novoItemPayload = {
-          comanda_id: comanda.id,
-          tipo: 'pacote',
-          item_id: pac.id,
+          tipo: 'servico',
+          item_id: pac.servico_id,
           descricao: pac.servico_nome + ' (Sessão de Pacote)',
           quantidade: itemQtd,
           valor_unitario: 0,
           valor_total: 0,
+          pacote_cliente_id: pac.id,
         };
       }
 
       if (!novoItemPayload) return;
 
-      // Inserir item na comanda
-      const { error: insertErr } = await (supabase as any)
-        .from('comanda_itens')
-        .insert([novoItemPayload]);
-      if (insertErr) throw insertErr;
-
-      // Recalcular subtotal buscando todos os itens atualizados
-      const { data: itensAtualizados } = await (supabase as any)
-        .from('comanda_itens')
-        .select('valor_total')
-        .eq('comanda_id', comanda.id);
-
-      const novoSubtotal = (itensAtualizados || []).reduce(
-        (sum: number, item: { valor_total?: string | number }) => sum + Number(item.valor_total || 0),
-        0,
-      );
-
-      // Atualizar subtotal e total na comanda
-      await (supabase as any)
-        .from('comandas')
-        .update({ subtotal: novoSubtotal, total: Math.max(0, novoSubtotal - (Number(comanda.desconto) || 0)) })
-        .eq('id', comanda.id);
+      const response = await fetch('/api/admin/comandas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comanda_id: comanda.id,
+          cliente_id: comanda.cliente_id,
+          profissional_id: comanda.profissional_id,
+          auxiliar_id: comanda.auxiliar_id,
+          data_agendamento: comanda.data_agendamento,
+          hora_inicio: comanda.hora_inicio?.slice(0, 5) ?? null,
+          observacoes: comanda.observacoes,
+          itens: [...(comanda.comanda_itens || []), novoItemPayload].map((item: any) => ({
+            tipo: item.tipo,
+            item_id: item.item_id,
+            quantidade: Number(item.quantidade) || 1,
+            pacote_cliente_id: item.pacote_cliente_id ?? null,
+            atribuicoes_etapas: item.etapas ?? [],
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
 
       toast.success('Item adicionado com sucesso!');
       // Fechar painel e recarregar
@@ -400,56 +446,22 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
       console.warn('[fecharComanda] SAINDO CEDO — comanda ausente ou status não é aberta:', comanda?.status);
       return;
     }
+    if (!metodoPagamento) {
+      toast.error('Selecione uma forma de pagamento ativa.');
+      return;
+    }
     try {
       setFechandoComanda(true);
 
       const descontoNum = Math.max(0, Number(desconto) || 0);
-      const subtotalFinal = (comanda.comanda_itens || []).reduce(
-        (sum: number, item: { valor_total?: string | number }) => sum + Number(item.valor_total || 0), 0,
-      );
-      const totalFinal = Math.max(0, subtotalFinal - descontoNum);
-
-      const updatePayload: Record<string, any> = {
-        status: 'fechada',
-        data_fechamento: new Date().toISOString(),
-        fechado_por: user?.id ?? null,
-        subtotal: subtotalFinal,
-        desconto: descontoNum,
-        total: totalFinal,
-      };
-
-      if (descontoNum > 0) {
-        updatePayload.desconto_aplicado_por = user?.id ?? null;
-        updatePayload.desconto_aplicado_em = new Date().toISOString();
-      } else {
-        updatePayload.desconto_aplicado_por = null;
-        updatePayload.desconto_aplicado_em = null;
-      }
-
-      console.log('[fecharComanda] Chamando supabase.update …');
-      const { error: cmdError } = await (supabase as any)
-        .from('comandas')
-        .update(updatePayload)
-        .eq('id', comanda.id);
-
-      console.log('[fecharComanda] update retornou — cmdError:', cmdError);
-      if (cmdError) {
-        console.error('[fecharComanda] cmdError LANÇADO:', cmdError);
-        throw cmdError;
-      }
-
-      // PASSO CRÍTICO: registrar transação financeira IMEDIATAMENTE após fechar comanda
-      console.log('[fecharComanda] totalFinal calculado:', totalFinal, '— chamando fetch …');
-      const hoje = new Date().toISOString().split('T')[0];
       const transResp = await fetch('/api/admin/fechar-comanda', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           comanda_id: comanda.id,
-          metodo_pagamento: metodoPagamento,
-          descricao: `Comanda #${comanda.numero_comanda}${comanda.cliente_nome ? ' — ' + comanda.cliente_nome : ''}`,
-          valor: totalFinal,
-          data: hoje,
+          forma_pagamento_id: metodoPagamento,
+          parcelas,
+          desconto: descontoNum,
         }),
       });
       if (!transResp.ok) {
@@ -457,75 +469,7 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
         console.error('[fecharComanda] transResp não ok:', transResp.status, transBody);
         throw new Error(transBody.error || `Erro HTTP ${transResp.status} ao registrar transação`);
       }
-      console.log('[fecharComanda] transação registrada com sucesso');
-
-      // Comissões — em try/catch isolado para não bloquear o fechamento
-      try {
-        if (comissoes.length > 0 && user?.id) {
-          const rows = comissoes
-            .filter((c) => c.valor >= 0)
-            .map((c) => ({
-              comanda_id: comanda.id,
-              profissional_id: c.profissional_id,
-              valor_comissao: c.valor,
-              criado_por: user.id,
-            }));
-          if (rows.length > 0) {
-            await (supabase as any).from('comissoes').insert(rows);
-          }
-        }
-      } catch {
-        // Comissões não bloqueiam o fechamento
-      }
-
-      // Estoque — em try/catch isolado
-      try {
-        const itensProduto = (comanda.comanda_itens || []).filter(
-          (item: any) => item.tipo === 'produto' && item.item_id
-        );
-        for (const item of itensProduto) {
-          const { data: prod } = await supabase
-            .from('produtos')
-            .select('quantidade')
-            .eq('id', item.item_id)
-            .single();
-          if (prod !== null) {
-            await (supabase as any).from('estoque_movimentacoes').insert([{
-              produto_id: item.item_id,
-              tipo: 'venda',
-              quantidade: Math.round(item.quantidade || 1),
-              quantidade_anterior: prod.quantidade,
-              quantidade_atual: prod.quantidade,
-              valor_unitario: item.valor_unitario || 0,
-              valor_total: item.valor_total || 0,
-              motivo: `Fechamento Comanda #${comanda.numero_comanda}`,
-            }]);
-          }
-        }
-      } catch {
-        // Ignora se tabela estoque_movimentacoes não existir
-      }
-
-      // Pacotes pré-pagos — em try/catch isolado para não bloquear o fechamento
-      try {
-        const itensPacote = (comanda.comanda_itens || []).filter(
-          (item: any) => item.tipo === 'pacote' && item.item_id,
-        );
-        if (itensPacote.length > 0 && comanda.cliente_id) {
-          await registrarCompraPacote({
-            comandaId: comanda.id,
-            clienteId: comanda.cliente_id,
-            clienteCpf: comanda.cliente?.cpf ?? null,
-            itensPacote: itensPacote.map((i: any) => ({ item_id: i.item_id, quantidade: i.quantidade || 1 })),
-            unitId: DEFAULT_UNIT_ID,
-          });
-        }
-
-        // Nota: débito de sessões acontece ao CRIAR a comanda (ComandaModal, via pacote_cliente_id)
-        //       Aqui registramos apenas a COMPRA de pacotes (tipo='pacote') ao fechar/pagar.
-      } catch (err) {
-        console.error('Erro ao processar pacotes:', err);
-      }
+      console.log('[fecharComanda] fechamento transacional concluído');
 
       toast.success(`Comanda #${comanda.numero_comanda} fechada com sucesso!`);
       await loadComanda();
@@ -538,26 +482,18 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
   };
 
   const cancelarComanda = async () => {
-    if (!comanda || !confirm(`Cancelar comanda #${comanda.numero_comanda}? Ela ficará no histórico como cancelada.`)) return;
+    if (!comanda || !confirm(`Excluir comanda #${comanda.numero_comanda}? Esta ação é irreversível.`)) return;
     try {
-      const { error } = await (supabase as any)
-        .from('comandas')
-        .update({ status: 'cancelada' })
-        .eq('id', comanda.id);
-      if (error) throw error;
-
-      // Excluir o agendamento associado (se houver) para refletir no calendário
-      await (supabase as any)
-        .from('agendamentos')
-        .delete()
-        .eq('comanda_id', comanda.id);
-
-      toast.success(`Comanda #${comanda.numero_comanda} cancelada e agendamento excluído.`);
-      // Notifica o pai sobre exclusão/cancelamento ANTES de fechar o drawer
+      const response = await fetch(`/api/admin/comandas?comanda_id=${comanda.id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Erro HTTP ${response.status}`);
+      toast.success(`Comanda #${comanda.numero_comanda} excluída com sucesso.`);
       onDelete?.();
       onClose();
-    } catch (err: any) {
-      toast.error(`Erro ao cancelar: ${err.message}`);
+    } catch (error: unknown) {
+      toast.error(`Erro ao excluir: ${error instanceof Error ? error.message : 'Tente novamente'}`);
     }
   };
 
@@ -629,6 +565,17 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
                 <h3 className="font-semibold text-neutral-900 flex items-center gap-2">
                   <User className="w-5 h-5 text-blue-600" />
                   Cliente
+                  {comanda.cliente_id && (
+                    <button
+                      type="button"
+                      onClick={() => setClientQuickViewOpen(true)}
+                      className="ml-auto flex h-9 w-9 items-center justify-center rounded-xl border border-primary-200 text-primary-700 hover:bg-primary-50"
+                      aria-label={`Ver detalhes de ${comanda.cliente?.nome || 'cliente'}`}
+                      title="Ver detalhes do cliente"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  )}
                 </h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2">
@@ -978,14 +925,28 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
                       <input
                         type="number"
                         min={0}
+                        max={subtotalComanda}
                         step={0.01}
-                        value={desconto}
-                        onChange={(e) => setDesconto(Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        value={desconto || ''}
+                        disabled={subtotalComanda <= 0}
+                        onChange={(e) => {
+                          const raw = parseFloat(e.target.value);
+                          if (isNaN(raw) || raw < 0) {
+                            setDesconto(0);
+                          } else {
+                            setDesconto(Math.min(raw, subtotalComanda));
+                          }
+                        }}
+                        className={`flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 ${subtotalComanda <= 0 ? 'opacity-50 cursor-not-allowed bg-neutral-100' : ''}`}
                         placeholder="0,00"
                       />
                     </div>
-                    {desconto > 0 && (
+                    {subtotalComanda <= 0 && (
+                      <p className="text-xs text-amber-600">
+                        Adicione itens à comanda antes de aplicar desconto.
+                      </p>
+                    )}
+                    {desconto > 0 && subtotalComanda > 0 && (
                       <p className="text-xs text-neutral-500">
                         Total com desconto:{' '}
                         <span className="font-semibold text-green-700">
@@ -1011,20 +972,9 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
                                 <p className="text-xs text-neutral-500">Sugestão: R$ {entry.valor_sugerido.toFixed(2)}</p>
                               )}
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-sm text-neutral-600">R$</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step={0.01}
-                                value={entry.valor}
-                                onChange={(e) => {
-                                  const novo = Math.max(0, parseFloat(e.target.value) || 0);
-                                  setComissoes((prev) => prev.map((c, i) => i === idx ? { ...c, valor: novo } : c));
-                                }}
-                                className="w-24 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
-                              />
-                            </div>
+                            <span className="shrink-0 text-sm font-semibold text-neutral-800">
+                              R$ {entry.valor_sugerido.toFixed(2)}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -1056,17 +1006,35 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
                     <label className="text-sm font-medium text-neutral-700 mb-1 block">Forma de pagamento</label>
                     <select
                       value={metodoPagamento}
-                      onChange={(e) => setMetodoPagamento(e.target.value)}
+                      onChange={(e) => { setMetodoPagamento(e.target.value); setParcelas(1); }}
                       className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
-                      <option value="dinheiro">Dinheiro</option>
-                      <option value="pix">PIX</option>
-                      <option value="cartao_credito">Cartão de Crédito</option>
-                      <option value="cartao_debito">Cartão de Débito</option>
+                      {formasPagamento.length === 0 && <option value="">Nenhuma forma ativa</option>}
+                      {formasPagamento.map(forma => (
+                        <option key={forma.id} value={forma.id}>
+                          {forma.nome}{forma.bandeira && !forma.nome.toLowerCase().includes(forma.bandeira.toLowerCase()) ? ` — ${forma.bandeira}` : ''}
+                        </option>
+                      ))}
                     </select>
+                    {formaPagamentoSelecionada?.permite_parcelamento && maxParcelasDisponiveis > 1 && (
+                      <div className="mb-3">
+                        <label className="text-sm font-medium text-neutral-700 mb-1 block">Parcelas</label>
+                        <select
+                          value={parcelas}
+                          onChange={event => setParcelas(Number(event.target.value))}
+                          className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                          {Array.from({ length: maxParcelasDisponiveis }, (_, index) => index + 1).map(quantity => (
+                            <option key={quantity} value={quantity}>
+                              {quantity}x de R$ {(totalComDesconto / quantity).toFixed(2)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <button
                       onClick={fecharComanda}
-                      disabled={fechandoComanda}
+                      disabled={fechandoComanda || !metodoPagamento}
                       className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center"
                     >
                       {fechandoComanda && (
@@ -1114,6 +1082,11 @@ export default function ComandaViewDrawer({ isOpen, onClose, comandaId, onEdit, 
           )}
         </div>
       </div>
+      <ClienteQuickViewModal
+        isOpen={clientQuickViewOpen}
+        clienteId={comanda?.cliente_id ? Number(comanda.cliente_id) : undefined}
+        onClose={() => setClientQuickViewOpen(false)}
+      />
     </>
   );
 }

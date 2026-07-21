@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -56,6 +58,14 @@ next-env.d.ts
 
 # Log files
 *.log
+/*_out.txt
+/*_output.txt
+/lint_output.txt
+/playwright_out*.txt
+/tsc*.txt
+
+# Local agent/tool state
+/.agents/
 
 # Editor directories and files
 .vscode/*

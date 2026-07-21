@@ -12,15 +12,14 @@ Região: South America (São Paulo)
 ### 2. Executar SQL (nesta ordem)
 ```
 SQL Editor → New Query
-1️⃣ Cole: database/schema.sql → Run
-2️⃣ Cole: database/migration_auth.sql → Run
-3️⃣ Cole: database/seed_users.sql → Run
+Não cole SQL legado. Siga supabase/README.md e a cadeia supabase/migrations/.
 ```
 
 ### 3. Configurar .env.local
 ```env
 NEXT_PUBLIC_SUPABASE_URL=sua_url_aqui
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_aqui
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
 ```
 
 ### 4. Iniciar App
@@ -35,8 +34,8 @@ npm run dev
 
 | Usuário | Email | Senha | Role |
 |---------|-------|-------|------|
-| Sr. Dimas | dimas@salaodimas.com | Dimas@2024 | admin |
-| João | joao@salaodimas.com | Joao@2024 | professional |
+| Admin E2E | `E2E_ADMIN_EMAIL` | `E2E_ADMIN_PASSWORD` | admin |
+| Profissional E2E | `E2E_PROFESSIONAL_EMAIL` | `E2E_PROFESSIONAL_PASSWORD` | professional |
 | Ana | ana@salaodimas.com | Ana@2024 | professional |
 
 ---
@@ -63,14 +62,14 @@ npm run dev
 ### ✅ Teste 1: Login Admin
 ```
 1. http://localhost:3000/login
-2. Login: dimas@salaodimas.com / Dimas@2024
+2. Login com `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`
 3. Verifica: Redirecionou para /admin
 4. Verifica: Sidebar mostra TODOS os menus
 ```
 
 ### ✅ Teste 2: Login Profissional
 ```
-1. Logout → Login: joao@salaodimas.com / Joao@2024
+1. Logout → Login com `E2E_PROFESSIONAL_EMAIL` / `E2E_PROFESSIONAL_PASSWORD`
 2. Verifica: Redirecionou para /profissionais
 3. Verifica: Sidebar NÃO mostra menus financeiros
 ```
@@ -87,8 +86,7 @@ Enquanto logado como profissional:
 ## 📁 Arquivos Criados
 
 ### Backend
-- ✅ `database/migration_auth.sql` - Triggers, RLS, functions
-- ✅ `database/seed_users.sql` - Usuários de teste
+- ✅ `supabase/migrations/` - única cadeia executável de schema, RLS e funções
 
 ### Frontend
 - ✅ `src/middleware.ts` - Proteção de rotas

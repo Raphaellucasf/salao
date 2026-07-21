@@ -4,7 +4,6 @@ import { Calendar, Clock, User, Star, ShoppingBag, TrendingUp, DollarSign, Alert
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { useState, useEffect } from 'react';
 
 interface NextAppointment {
   id: string;
@@ -23,43 +22,20 @@ interface Commission {
 }
 
 export default function ProfessionalDashboard() {
-  const [nextAppointment, setNextAppointment] = useState<NextAppointment | null>(null);
-  const [todayStats, setTodayStats] = useState({
-    appointments: 0,
-    completed: 0,
-    revenue: 0,
-  });
-  const [commission, setCommission] = useState<Commission>({
-    total_pending: 0,
-    total_paid: 0,
-    vales_balance: 0,
-  });
-
-  // TODO: Substituir por chamadas reais à API
-  useEffect(() => {
-    // Mock data
-    setNextAppointment({
-      id: '1',
-      client_name: 'Maria Silva',
-      client_is_vip: true,
-      has_anamnese: true,
-      service_name: 'Luzes + Tonalizante',
-      start_time: '14:30',
-      duration: 120,
-    });
-
-    setTodayStats({
-      appointments: 6,
-      completed: 3,
-      revenue: 1850,
-    });
-
-    setCommission({
-      total_pending: 3250.50,
-      total_paid: 8900.00,
-      vales_balance: 500.00,
-    });
-  }, []);
+  const nextAppointment: NextAppointment | null = {
+    id: '1', client_name: 'Maria Silva', client_is_vip: true, has_anamnese: true,
+    service_name: 'Luzes + Tonalizante', start_time: '14:30', duration: 120,
+  };
+  const todayStats = {
+    appointments: 6,
+    completed: 3,
+    revenue: 1850,
+  };
+  const commission: Commission = {
+    total_pending: 3250.50,
+    total_paid: 8900.00,
+    vales_balance: 500.00,
+  };
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-20 lg:pb-8">

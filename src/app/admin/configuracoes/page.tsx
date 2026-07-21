@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withAdminOnly } from '@/components/auth/withAdminOnly';
-import { Settings, CreditCard, Tag, Store, Plus, Pencil, Trash2, Search, DollarSign, Calendar, Users, Bot } from 'lucide-react';
+import { CreditCard, Tag, Store, Plus, Pencil, Trash2, Search, DollarSign, Calendar, Users, Bot } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import FormaPagamentoModal from '@/components/modals/FormaPagamentoModal';
@@ -90,7 +90,6 @@ function ConfiguracoesPage() {
     try {
       const { error } = await supabase
         .from('configuracoes_sistema')
-        // @ts-ignore - configuracoes_sistema table not in types
         .update({
           nome_empresa: config.nome_empresa,
           cnpj: config.cnpj,

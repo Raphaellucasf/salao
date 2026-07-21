@@ -203,20 +203,18 @@
 
 2. **Executar SQL** (5 min)
    ```sql
-   1. database/schema.sql
-   2. database/migration_auth.sql
-   3. database/seed_users.sql
+   Use exclusivamente a cadeia ordenada de supabase/migrations/
    ```
 
 3. **Configurar .env.local** (2 min)
    ```env
    NEXT_PUBLIC_SUPABASE_URL=...
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
    ```
 
 4. **Testar Login** (3 min)
-   - Admin: dimas@salaodimas.com / Dimas@2024
-   - Professional: joao@salaodimas.com / Joao@2024
+   - Admin: `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`
+   - Professional: `E2E_PROFESSIONAL_EMAIL` / `E2E_PROFESSIONAL_PASSWORD`
 
 ---
 
@@ -318,7 +316,7 @@
 ### Stack Utilizado
 
 **Frontend:**
-- Next.js 15.1.3
+- Next.js 16.2.10
 - React 19
 - TypeScript 5
 - Tailwind CSS 4
