@@ -48,8 +48,8 @@ if (!fs.existsSync(path.join(root, 'supabase', 'README.md'))) {
   errors.push('supabase/README.md: fonte canônica de migrações não documentada');
 }
 const canonicalMigrations = walk('supabase/migrations').filter((file) => file.endsWith('.sql'));
-if (canonicalMigrations.length !== 39) {
-  errors.push(`supabase/migrations: esperadas 39 migrações canônicas, encontradas ${canonicalMigrations.length}`);
+if (canonicalMigrations.length !== 40) {
+  errors.push(`supabase/migrations: esperadas 40 migrações canônicas, encontradas ${canonicalMigrations.length}`);
 }
 const competingMigrations = fs.existsSync(path.join(root, 'database', 'migrations'))
   ? walk('database/migrations').filter((file) => file.endsWith('.sql'))

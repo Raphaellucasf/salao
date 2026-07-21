@@ -22,9 +22,13 @@ function serviceText(value: Json | null): string {
   }
   if (Array.isArray(value)) return value.map(serviceText).filter(Boolean).join(', ');
   if (typeof value === 'object') {
-    const name = value.nome;
-    if (typeof name === 'string') return name;
-    return Object.values(value).map((item) => serviceText(item ?? null)).filter(Boolean).join(', ');
+    for (const key of ['nome', 'servico_nome', 'name'] as const) {
+      const name = value[key];
+      if (typeof name === 'string') return name;
+    }
+    // Não percorra valores arbitrários: objetos desconhecidos podem conter
+    // IDs, preços ou outros metadados internos que não pertencem à interface.
+    return '';
   }
   return '';
 }

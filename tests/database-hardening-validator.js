@@ -145,6 +145,13 @@ const requestUnit = read('supabase/migrations/20260718210000_harden_request_unit
 assert.ok(requestUnit.includes("->> 'x-unit-id'"), 'service runtime não propaga unidade por header interno');
 assert.ok(requestUnit.includes("having count(distinct uu.unit_id) = 1"), 'fallback legado não falha fechado em cenário multiunidade');
 
+const membershipRepair = read('supabase/migrations/20260721140000_repair_missing_admin_unit_memberships.sql');
+assert.ok(membershipRepair.includes("where u.role = 'admin'"), 'reparo não limita candidatos a administradores');
+assert.ok(membershipRepair.includes('count(*)') && membershipRepair.includes('v_active_unit_count = 1'), 'reparo não exige unidade ativa não ambígua');
+assert.ok(membershipRepair.includes('on conflict (user_id, unit_id) do update'), 'reparo de associação não é idempotente');
+assert.ok(membershipRepair.includes('admin_unit_membership_repair_required'), 'reparo não falha com diagnóstico quando a derivação é ambígua');
+assert.ok(!membershipRepair.includes('00000000-0000-0000-0000-000000000001'), 'reparo ainda depende de UUID fixo de unidade');
+
 const tenantRelationships = read('supabase/migrations/20260718213000_repair_tenant_relationships.sql');
 assert.ok(tenantRelationships.includes('alter column cliente_id type bigint'), 'dados clínicos ainda usam tipo incompatível com clientes.id');
 assert.ok(tenantRelationships.includes('anamneses_cliente_id_fkey'), 'anamnese ainda não referencia cliente canônico');
