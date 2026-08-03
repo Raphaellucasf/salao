@@ -66,7 +66,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
     try {
       const { data } = await supabase
         .from('servicos')
-        .select('*')
+        .select('id,nome,preco,duracao_minutos,ativo')
         .eq('ativo', true)
         .order('nome');
       setServicos(data || []);
@@ -195,6 +195,7 @@ export default function PacoteServicoModal({ isOpen, onClose, pacote, onSave }: 
           action: pacoteId ? 'UPDATE' : 'CREATE',
           pacote: pacotePayload,
           itens: itensPayload,
+          request_id: crypto.randomUUID(),
         }),
       });
 
