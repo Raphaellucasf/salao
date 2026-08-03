@@ -98,7 +98,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     try {
       const { data, error } = await supabase
         .from('servico_etapas')
-        .select('*')
+        .select('id,servico_id,nome,descricao,duracao_minutos,ordem,pode_ter_auxiliar,exige_profissional,ativo')
         .eq('servico_id', servicoId)
         .eq('ativo', true)
         .order('ordem', { ascending: true });
@@ -126,7 +126,7 @@ export function ServicoModal({ isOpen, onClose, servico, onSuccess }: ServicoMod
     try {
       const { data, error } = await supabase
         .from('grupos_servicos')
-        .select('*')
+        .select('id,nome,ativo')
         .eq('ativo', true)
         .order('nome');
 

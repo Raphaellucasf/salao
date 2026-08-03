@@ -80,7 +80,10 @@ export default function AgendarPage() {
   useEffect(() => {
     async function fetchUnits() {
       setIsLoadingUnits(true);
-      const { data } = await supabase.from('units').select('*').eq('is_active', true);
+      const { data } = await supabase
+        .from('units')
+        .select('id, name, address, is_active')
+        .eq('is_active', true);
       if (data) {
         setUnits(data as Unit[]);
       }
@@ -96,14 +99,14 @@ export default function AgendarPage() {
       setProfessionals([]);
       let result = await supabase
         .from('profissionais')
-        .select('*')
+        .select('id, nome, ativo, cor_agenda, foto_url')
         .eq('ativo', true)
         .eq('unit_id', selectedUnit!.id)
         .order('nome');
       if (isLegacyCatalogSchema(result.error)) {
         result = await supabase
           .from('profissionais')
-          .select('*')
+          .select('id, nome, ativo, cor_agenda, foto_url')
           .eq('ativo', true)
           .order('nome');
       }
@@ -124,14 +127,14 @@ export default function AgendarPage() {
       setServices([]);
       let result = await supabase
         .from('servicos')
-        .select('*')
+        .select('id, nome, duracao_minutos, preco, categoria')
         .eq('ativo', true)
         .eq('unit_id', selectedUnit!.id)
         .order('nome');
       if (isLegacyCatalogSchema(result.error)) {
         result = await supabase
           .from('servicos')
-          .select('*')
+          .select('id, nome, duracao_minutos, preco, categoria')
           .eq('ativo', true)
           .order('nome');
       }

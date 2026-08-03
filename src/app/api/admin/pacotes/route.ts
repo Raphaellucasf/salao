@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api-auth';
+import { getRequestId, logSecurityEvent, toErrorDetails } from '@/lib/observability';
 import { createServerSupabase } from '@/lib/supabase-server';
 import type { Json } from '@/types/supabase';
 
@@ -32,6 +33,46 @@ function parseItems(value: unknown): PackageItem[] | null {
     items.push({ servico_id: item.servico_id, quantidade: quantity, ordem: index + 1 });
   }
   return items;
+}
+
+function packageSaveError(error: { code?: string; message?: string }, req: NextRequest) {
+  const status = error.code === 'PGRST202' || error.message?.includes('save_service_package_atomic')
+    || error.code === '42501' ? 503
+    : error.code === '23505' ? 409
+    : error.code === 'P0002' ? 404
+    : 400;
+  logSecurityEvent({
+    event: 'service_package.save_failure',
+    route: req.nextUrl.pathname,
+    status,
+    requestId: getRequestId(req),
+    ...toErrorDetails(error),
+  });
+  if (error.code === 'PGRST202' || error.message?.includes('save_service_package_atomic')) {
+    return NextResponse.json(
+      { error: 'Pacotes temporariamente indisponíveis — migração de produção pendente' },
+      { status: 503 },
+    );
+  }
+  if (error.code === '42501') {
+    return NextResponse.json(
+      { error: 'Permissões de pacotes desatualizadas no ambiente de produção' },
+      { status: 503 },
+    );
+  }
+  if (error.code === '23505') {
+    return NextResponse.json({ error: 'Código de pacote já cadastrado' }, { status: 409 });
+  }
+  if (error.code === 'P0002') {
+    return NextResponse.json({ error: 'Pacote não encontrado' }, { status: 404 });
+  }
+  if (error.code === '23503') {
+    return NextResponse.json(
+      { error: 'Um dos serviços não existe, está inativo ou pertence a outra unidade' },
+      { status: 400 },
+    );
+  }
+  return NextResponse.json({ error: 'Não foi possível salvar o pacote' }, { status: 400 });
 }
 
 export async function POST(req: NextRequest) {
@@ -105,16 +146,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json({ error: 'Código de pacote já cadastrado' }, { status: 409 });
-      }
-      if (error.code === 'P0002') {
-        return NextResponse.json({ error: 'Pacote não encontrado' }, { status: 404 });
-      }
-      if (error.code === '23503') {
-        return NextResponse.json({ error: 'Um dos serviços não existe ou está inativo' }, { status: 400 });
-      }
-      return NextResponse.json({ error: 'Não foi possível salvar o pacote' }, { status: 400 });
+      return packageSaveError(error, req);
     }
 
     return NextResponse.json(data, { status: packageId ? 200 : 201 });

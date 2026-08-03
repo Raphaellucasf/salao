@@ -1,11 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api-auth';
+import { getRequestId, logSecurityEvent, toErrorDetails } from '@/lib/observability';
 import { createServerSupabase } from '@/lib/supabase-server';
 import type { Json } from '@/types/supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const textValue = (value: unknown, max: number) => typeof value === 'string' && value.trim().length <= max ? value.trim() : null;
+
+function serviceSaveError(error: { code?: string; message?: string }, req: NextRequest) {
+  const status = error.code === 'PGRST202' || error.message?.includes('save_service_catalog_atomic')
+    || error.code === '42501' ? 503
+    : error.code === '23505' ? 409
+    : error.code === 'P0002' ? 404
+    : 400;
+  logSecurityEvent({
+    event: 'service_catalog.save_failure',
+    route: req.nextUrl.pathname,
+    status,
+    requestId: getRequestId(req),
+    ...toErrorDetails(error),
+  });
+  if (error.code === 'PGRST202' || error.message?.includes('save_service_catalog_atomic')) {
+    return NextResponse.json(
+      { error: 'Catálogo temporariamente indisponível — migração de produção pendente' },
+      { status: 503 },
+    );
+  }
+  if (error.code === '42501') {
+    return NextResponse.json(
+      { error: 'Permissões do catálogo desatualizadas no ambiente de produção' },
+      { status: 503 },
+    );
+  }
+  if (error.code === '23505') {
+    return NextResponse.json({ error: 'Código já cadastrado' }, { status: 409 });
+  }
+  if (error.code === 'P0002') {
+    return NextResponse.json({ error: 'Serviço não encontrado' }, { status: 404 });
+  }
+  if (error.code === '23503') {
+    return NextResponse.json({ error: 'O grupo selecionado não pertence à unidade atual' }, { status: 400 });
+  }
+  return NextResponse.json({ error: 'Não foi possível salvar o serviço' }, { status: 400 });
+}
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -57,8 +95,7 @@ export async function POST(req: NextRequest) {
       p_actor_id: auth.id, p_request_id: requestId,
     });
     if (error) {
-      const status = error.code === '23505' ? 409 : error.code === 'P0002' ? 404 : 400;
-      return NextResponse.json({ error: status === 409 ? 'Código já cadastrado' : status === 404 ? 'Serviço não encontrado' : 'Não foi possível salvar o serviço' }, { status });
+      return serviceSaveError(error, req);
     }
     return NextResponse.json(data, { status: id ? 200 : 201 });
   } catch {

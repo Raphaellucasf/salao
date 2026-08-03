@@ -159,6 +159,60 @@ assert.ok(tenantRelationships.includes('prontuarios_cliente_id_fkey'), 'prontuá
 assert.ok(tenantRelationships.includes('servico_etapas_servico_id_fkey'), 'etapas ainda podem ficar órfãs');
 assert.ok(tenantRelationships.includes('private.enforce_parent_unit'), 'novos relacionamentos não validam a mesma unidade');
 
+const productionCatalog = read('supabase/migrations/20260803191000_production_catalog_rpc_repair.sql');
+for (const rpc of [
+  'save_service_catalog_atomic',
+  'save_service_package_atomic',
+  'delete_service_catalog_atomic',
+]) {
+  assert.ok(productionCatalog.includes(`function public.${rpc}`), `${rpc} ausente no reparo de produção`);
+}
+assert.ok(productionCatalog.includes('actor_not_authorized_for_unit'), 'RPCs de catálogo não validam ator/unidade');
+assert.ok(productionCatalog.includes('pg_advisory_xact_lock'), 'idempotência de catálogo não bloqueia concorrência');
+assert.ok(productionCatalog.includes('select gen_random_uuid(), v_id'), 'etapas não recebem UUID no banco');
+assert.ok(productionCatalog.includes('grant select (id, unit_id, nome, ativo, cor_agenda, foto_url)'),
+  'catálogo público de profissionais expõe colunas além da allowlist');
+
+const productionTenancy = read('supabase/migrations/20260803191500_production_tenancy_completion.sql');
+assert.ok(productionTenancy.includes("if to_regclass('public.' || v_table) is null"),
+  'conclusão de tenancy não tolera tabelas legadas ausentes');
+assert.ok(productionTenancy.includes('as restrictive for all to authenticated'),
+  'conclusão de tenancy não impõe boundary restritiva');
+assert.ok(productionTenancy.includes('alter column unit_id set not null'),
+  'conclusão de tenancy ainda permite unit_id nulo');
+assert.ok(productionTenancy.includes('unit_id_immutable'),
+  'conclusão de tenancy não torna unit_id imutável');
+assert.ok(productionTenancy.includes('cross_unit_reference'),
+  'conclusão de tenancy não bloqueia relacionamentos entre unidades');
+
+const productionViews = read('supabase/migrations/20260803192000_production_view_rls_hardening.sql');
+assert.ok(productionViews.includes('security_invoker = true'), 'reparo de views não aplica RLS do chamador');
+assert.ok(productionViews.includes('from public, anon, authenticated'), 'reparo de views não revoga acesso público');
+assert.ok(productionViews.includes('alter table public.vw_servicos_n8n enable row level security'),
+  'tabela legada vw_servicos_n8n continua sem RLS');
+assert.ok(productionViews.includes('revoke all privileges on public.vw_profissionais_com_grupos from authenticated'),
+  'view sensível de profissionais continua acessível ao navegador');
+
+const productionSecurity = read('supabase/migrations/20260803193000_production_security_advisor_repair.sql');
+assert.ok(productionSecurity.includes("e.extname in ('pg_trgm', 'postgres_fdw')"),
+  'extensões legadas continuam no schema público');
+assert.ok(productionSecurity.includes('set search_path = pg_catalog, public, private, extensions'),
+  'funções legadas continuam com search_path mutável');
+assert.ok(productionSecurity.includes("'check_comanda_periodo_fechado'"),
+  'funções SECURITY DEFINER legadas não foram inventariadas');
+assert.ok(productionSecurity.includes('from public, anon, authenticated'),
+  'funções/tabelas internas continuam acessíveis ao navegador');
+assert.ok(productionSecurity.includes("array['user_units', 'usuarios_sessoes', 'vw_servicos_n8n']"),
+  'tabelas backend-only não possuem política RLS explícita');
+assert.ok(productionSecurity.includes('drop policy if exists webhook_log_insert'),
+  'webhook_log ainda aceita inserção pública');
+assert.ok(productionSecurity.includes('formas_pagamento_member_select'),
+  'formas de pagamento continuam com SELECT irrestrito');
+assert.ok(productionSecurity.includes("array['clientes', 'comanda_itens', 'comandas']"),
+  'políticas operacionais duplicadas não foram consolidadas');
+assert.ok(productionSecurity.includes('drop policy if exists tenant_admin_all'),
+  'catálogo continua com políticas permissivas sobrepostas');
+
 for (const file of [
   'src/app/admin/anamnese/page.tsx',
   'src/components/modals/AnamneseModal.tsx',
