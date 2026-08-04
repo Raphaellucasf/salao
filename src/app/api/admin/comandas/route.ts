@@ -94,6 +94,15 @@ export async function POST(request: NextRequest) {
             { status: 409 },
           );
         }
+        if (error.code === 'PGRST202') {
+          return NextResponse.json(
+            {
+              code: 'SUPABASE_SYNC_REQUIRED',
+              error: 'Ambiente Supabase desatualizado — aplique as migrações de agenda e comandas',
+            },
+            { status: 503 },
+          );
+        }
         const mapped = ERRORS[error.message];
         return NextResponse.json(
           { error: mapped?.message ?? 'Não foi possível salvar a comanda' },
@@ -102,7 +111,37 @@ export async function POST(request: NextRequest) {
       }
 
       const createdId = Number((data as { comanda_id?: unknown } | null)?.comanda_id);
-      if (Number.isSafeInteger(createdId) && createdId > 0) createdCommandIds.push(createdId);
+      if (!Number.isSafeInteger(createdId) || createdId <= 0) {
+        return NextResponse.json({ error: 'Resposta inválida ao salvar a comanda' }, { status: 500 });
+      }
+      if (comandaId === null) createdCommandIds.push(createdId);
+
+      if (occurrenceDate !== null) {
+        const { data: linkedAppointment, error: linkedAppointmentError } = await db
+          .from('agendamentos')
+          .select('id')
+          .eq('comanda_id', createdId)
+          .eq('unit_id', authResult.unitId)
+          .maybeSingle();
+
+        if (linkedAppointmentError || !linkedAppointment) {
+          if (comandaId === null) {
+            for (const pendingId of [...createdCommandIds].reverse()) {
+              await db.rpc('cancel_comanda_atomic' as never, {
+                p_comanda_id: pendingId,
+                p_admin_id: authResult.id,
+              } as never);
+            }
+          }
+          return NextResponse.json(
+            {
+              code: 'SUPABASE_SYNC_REQUIRED',
+              error: 'Comanda não sincronizada com a agenda — aplique as migrações do Supabase',
+            },
+            { status: 503 },
+          );
+        }
+      }
       created.push(data);
     }
     return NextResponse.json({

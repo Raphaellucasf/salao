@@ -213,6 +213,25 @@ assert.ok(productionSecurity.includes("array['clientes', 'comanda_itens', 'coman
 assert.ok(productionSecurity.includes('drop policy if exists tenant_admin_all'),
   'catálogo continua com políticas permissivas sobrepostas');
 
+const comandaAppointmentSync = read('supabase/migrations/20260803235038_repair_comanda_appointment_sync.sql');
+assert.ok(
+  comandaAppointmentSync.includes('create trigger trigger_criar_agendamento_comanda'),
+  'sincronização com a agenda não instala o trigger ausente',
+);
+assert.ok(
+  comandaAppointmentSync.includes('after insert or update of data_agendamento, hora_inicio, profissional_id'),
+  'trigger de agenda não acompanha alterações do horário da comanda',
+);
+assert.ok(
+  comandaAppointmentSync.includes('perform public.criar_agendamento_da_comanda(new.id)'),
+  'trigger de agenda não cria o agendamento associado à comanda',
+);
+assert.ok(
+  comandaAppointmentSync.includes('and not exists (')
+    && comandaAppointmentSync.includes('where comanda_id = new.id'),
+  'trigger de agenda não é idempotente por comanda',
+);
+
 for (const file of [
   'src/app/admin/anamnese/page.tsx',
   'src/components/modals/AnamneseModal.tsx',
@@ -225,6 +244,21 @@ for (const file of [
 const appointments = read('src/app/api/appointments/route.ts');
 assert.ok(appointments.includes("error?.code === '23p01'"), 'API não traduz conflito concorrente');
 assert.ok(appointments.includes("{ error: 'horário indisponível' }, { status: 409 }"), 'API não retorna 409 para sobreposição');
+
+const comandasApi = read('src/app/api/admin/comandas/route.ts');
+assert.ok(
+  comandasApi.includes("error.code === 'pgrst202'"),
+  'API de comandas não diagnostica RPC ausente no ambiente Supabase',
+);
+assert.ok(
+  comandasApi.includes(".from('agendamentos')")
+    && comandasApi.includes(".eq('comanda_id', createdid)"),
+  'API de comandas não confirma o vínculo criado na agenda',
+);
+assert.ok(
+  comandasApi.includes('supabase_sync_required'),
+  'API de comandas ainda aceita sucesso silencioso sem sincronização do Supabase',
+);
 
 const legacyComandas = read('database/comandas_schema.sql');
 assert.ok(legacyComandas.includes("nextval('public.comandas_numero_seq')"), 'bootstrap legado ainda não usa sequência de comanda');
